@@ -3,7 +3,7 @@ import { CalendarWidget } from './CalendarWidget.jsx'
 
 const DOT_COLORS = ['#818cf8','#34d399','#fb923c','#60a5fa','#f472b6','#a78bfa','#38bdf8','#4ade80']
 
-export function WidgetCard({ widget, onDelete, onEdit, appId }) {
+export function WidgetCard({ widget, onDelete, onEdit, appId, editMode }) {
   const [hovered, setHovered] = useState(false)
   const items = Array.isArray(widget.items) ? widget.items : []
 
@@ -13,7 +13,7 @@ export function WidgetCard({ widget, onDelete, onEdit, appId }) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {hovered && (
+        {hovered && editMode && (
           <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:4, zIndex:10 }}>
             <button onClick={() => onDelete(widget.id)} style={{
               background:'var(--danger-bg)', border:'1px solid var(--danger)', borderRadius:6,
@@ -31,14 +31,14 @@ export function WidgetCard({ widget, onDelete, onEdit, appId }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)',
+        background:'var(--bg)', border:`1px solid ${editMode ? 'var(--accent-bg)' : 'var(--border)'}`, borderRadius:'var(--radius-lg)',
         padding:16, position:'relative', minHeight:92,
         transition:'box-shadow 0.15s, border-color 0.15s',
-        boxShadow: hovered ? 'var(--shadow)' : 'none',
-        borderColor: hovered ? 'var(--border-2)' : 'var(--border)',
+        boxShadow: hovered && editMode ? 'var(--shadow)' : 'none',
+        borderColor: editMode ? (hovered ? 'var(--accent)' : 'var(--accent-bg)') : (hovered ? 'var(--border-2)' : 'var(--border)'),
       }}
     >
-      {hovered && (
+      {hovered && editMode && (
         <>
           <button onClick={() => onEdit(widget)} style={{
             position:'absolute', top:6, right:30, zIndex:2,
