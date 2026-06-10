@@ -39,16 +39,18 @@ export function WidgetCard({ widget, onDelete, onEdit, appId }) {
       }}
     >
       {hovered && (
-        <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:4, zIndex:1 }}>
+        <>
           <button onClick={() => onEdit(widget)} style={{
-            background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:6,
-            padding:'3px 7px', cursor:'pointer', color:'var(--text-2)', fontSize:12,
-          }}><i className="ti ti-edit" /></button>
+            position:'absolute', top:6, right:30, zIndex:2,
+            width:20, height:20, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+            background:'var(--bg-3)', border:'1px solid var(--border-2)', cursor:'pointer', color:'var(--text-2)', fontSize:11,
+          }} title="Edit"><i className="ti ti-pencil" /></button>
           <button onClick={() => onDelete(widget.id)} style={{
-            background:'var(--danger-bg)', border:'1px solid var(--danger)', borderRadius:6,
-            padding:'3px 7px', cursor:'pointer', color:'var(--danger)', fontSize:12,
-          }}><i className="ti ti-trash" /></button>
-        </div>
+            position:'absolute', top:-8, right:-8, zIndex:2,
+            width:20, height:20, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+            background:'var(--danger)', border:'2px solid var(--bg)', cursor:'pointer', color:'#fff', fontSize:11, fontWeight:700,
+          }} title="Remove">✕</button>
+        </>
       )}
 
       <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:7 }}>
