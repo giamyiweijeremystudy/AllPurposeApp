@@ -71,6 +71,11 @@ export async function deleteTab(id) {
   await supabase.from('tabs').delete().eq('id', id)
 }
 
+export async function updateTab(id, patch) {
+  const { data } = await supabase.from('tabs').update(patch).eq('id', id).select().single()
+  return data
+}
+
 // ── Widgets ─────────────────────────────────────────────────
 export async function createWidget(pageId, payload, tabId) {
   const query = supabase.from('widgets').select('sort_order').eq('page_id', pageId)
