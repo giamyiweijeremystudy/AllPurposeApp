@@ -284,10 +284,7 @@ button, input, select, textarea { font-family: inherit; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .skeleton { background: var(--bg-3); border-radius: 4px; animation: pulse 1.4s ease infinite; }
 
-/* ── Bottom nav (hidden on desktop) ── */
-.bottom-nav {
-  display: none;
-}
+
 .bottom-nav-item {
   flex: 1;
   display: flex;
@@ -316,40 +313,65 @@ button, input, select, textarea { font-family: inherit; }
 /* ════════════════════════════════════════
    MOBILE  (≤ 768px)
 ════════════════════════════════════════ */
+/* ── Mobile-only helpers ── */
+.mob-only { display: none; }
+.mob-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 190;
+  backdrop-filter: blur(1px);
+}
+
 @media (max-width: 768px) {
-  /* Hide desktop sidebar entirely */
-  .sidebar { display: none; }
+  .mob-only { display: flex; }
 
-  /* Show bottom nav */
-  .bottom-nav {
-    display: flex;
+  /* Sidebar: off-screen by default, slides in as drawer */
+  .sidebar {
     position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 60px;
-    background: var(--bg-2);
-    border-top: 1px solid var(--border);
+    top: 0; left: 0; bottom: 0;
+    width: 76vw !important;
+    max-width: 280px !important;
+    min-width: unset !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.18);
     z-index: 200;
-    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
   }
+  .sidebar--mobile-open {
+    transform: translateX(0);
+  }
+  /* Hide desktop collapse toggle inside drawer */
+  .sidebar .icon-btn { display: none; }
+  /* Always show full labels in drawer */
+  .sidebar-title { display: block !important; }
+  .nav-item-label { display: block !important; }
+  .nav-badge { display: inline !important; }
+  .section-label { display: block !important; }
 
-  /* Main takes full width, leave room for bottom nav */
-  .main { width: 100%; padding-bottom: 60px; }
+  /* Show backdrop */
+  .mob-backdrop { display: block; }
 
-  /* Topbar: tighter padding, no sidebar toggle */
-  .topbar { padding: 0 14px; }
+  /* Main full width, no padding-bottom needed */
+  .main { width: 100%; }
 
-  /* Content: smaller padding */
+  /* Topbar */
+  .topbar { padding: 0 14px; gap: 6px; }
+
+  /* Content */
   .content { padding: 14px; }
 
-  /* Tabs: smaller and scrollable */
-  .tab-bar { padding: 0 10px; }
+  /* Tabs */
+  .tab-bar { padding: 0 8px; }
   .tab-btn { padding: 10px 10px; font-size: 12px; gap: 4px; }
+  .tab-label { font-size: 12px; }
 
-  /* Widget grid: single column on small screens */
+  /* Widget grid single column */
   .widget-grid { grid-template-columns: 1fr; }
 
-  /* Toast: full-width, above bottom nav */
-  .toast { left: 14px; right: 14px; bottom: 70px; }
+  /* Toast */
+  .toast { left: 14px; right: 14px; bottom: 16px; }
 }
 
 /* ════════════════════════════════════════
