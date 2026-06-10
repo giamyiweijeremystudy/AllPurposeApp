@@ -11,6 +11,7 @@ export default function App() {
   const [activeNav, setActiveNav] = useState(null)
   const [activeTab, setActiveTab] = useState({})
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -37,6 +38,12 @@ export default function App() {
   useEffect(() => {
     if (state?.app?.name) document.title = state.app.name
   }, [state?.app?.name])
+
+  // Close drawer on nav
+  const navigateTo = (id) => {
+    setActiveNav(id)
+    setMobileDrawerOpen(false)
+  }
 
   if (loading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, color:'var(--text-2)' }}>
@@ -67,37 +74,68 @@ export default function App() {
     else if (btn.action === 'toast') showToast(btn.prompt || btn.label)
   }
 
-  return (
-    <div style={{ height:'100vh', display:'flex', overflow:'hidden', background:'var(--bg)' }}>
+  const renderContent = () => {
+    if (!activeNav) return (
+      <div className="empty-state">
+        <i className="ti ti-layout-sidebar" style={{ fontSize:44 }} />
+        <span style={{ fontSize:14 }}>Select a page</span>
+      </div>
+    )
+    const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
+    if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
+      return <ScheduleDashboard appId={appId} onSwitchTab={which => {
+        const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
+        if (target) setActiveTab(p => ({ ...p, [activeNav]: target.id }))
+      }} />
+    }
+    if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
+    if (pageWidgets.length === 0) return (
+      <div className="empty-state">
+        <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
+        <span style={{ fontSize:14 }}>Nothing here yet</span>
+      </div>
+    )
+    return (
+      <div className="widget-grid">
+        {pageWidgets.map(w => <WidgetCard key={w.id} widget={w} appId={appId} />)}
+      </div>
+    )
+  }
 
-      {/* ── SIDEBAR ── */}
-      <aside style={{
-        width: collapsed ? 52 : 220, minWidth: collapsed ? 52 : 220,
-        background:'var(--bg-2)', borderRight:'1px solid var(--border)',
-        display:'flex', flexDirection:'column',
-        transition:'width 0.2s, min-width 0.2s', overflow:'hidden',
-      }}>
-        <div style={{ display:'flex', alignItems:'center', padding:'0 14px', height:50, borderBottom:'1px solid var(--border)', gap:8, flexShrink:0 }}>
-          {!collapsed && <span style={{ fontWeight:700, fontSize:14, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{app.name}</span>}
-          <button onClick={() => setCollapsed(c => !c)} style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', fontSize:16, display:'flex', flexShrink:0, padding:2 }}>
+  return (
+    <div className="app-shell">
+
+      {/* ── MOBILE DRAWER BACKDROP ── */}
+      {mobileDrawerOpen && (
+        <div className="drawer-backdrop" onClick={() => setMobileDrawerOpen(false)} />
+      )}
+
+      {/* ── SIDEBAR (desktop) / DRAWER (mobile) ── */}
+      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileDrawerOpen ? 'sidebar--open' : ''}`}>
+        <div className="sidebar-header">
+          {!collapsed && <span className="sidebar-title">{app.name}</span>}
+          <button className="icon-btn" onClick={() => { setCollapsed(c => !c); setMobileDrawerOpen(false) }}>
             <i className={`ti ${collapsed ? 'ti-layout-sidebar-right' : 'ti-layout-sidebar-left'}`} />
           </button>
         </div>
 
-        <div style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
+        <div className="sidebar-nav">
           {sections.sort((a,b) => a.sort_order - b.sort_order).map(sec => {
             const items = navItems.filter(i => i.section_id === sec.id).sort((a,b) => a.sort_order - b.sort_order)
             return (
               <div key={sec.id} style={{ marginBottom:8 }}>
                 {!collapsed && (
-                  <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', padding:'6px 14px 3px', textTransform:'uppercase', letterSpacing:'0.1em' }}>
-                    {sec.label}
-                  </div>
+                  <div className="section-label">{sec.label}</div>
                 )}
                 {items.map(item => (
-                  <NavRow key={item.id} item={item} active={activeNav === item.id} collapsed={collapsed}
-                    onClick={() => setActiveNav(item.id)}
-                  />
+                  <button key={item.id} onClick={() => navigateTo(item.id)}
+                    className={`nav-item ${activeNav === item.id ? 'nav-item--active' : ''} ${collapsed ? 'nav-item--collapsed' : ''}`}>
+                    <i className={`ti ${item.icon}`} style={{ fontSize:16, flexShrink:0 }} />
+                    {!collapsed && <span className="nav-item-label">{item.label}</span>}
+                    {!collapsed && item.badge && (
+                      <span className="nav-badge">{item.badge}</span>
+                    )}
+                  </button>
                 ))}
               </div>
             )
@@ -106,25 +144,28 @@ export default function App() {
       </aside>
 
       {/* ── MAIN ── */}
-      <main style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
+      <main className="main">
 
         {/* Topbar */}
-        <div style={{ height:50, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 20px', gap:8, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
+        <div className="topbar">
+          {/* Mobile hamburger */}
+          <button className="icon-btn mobile-only" onClick={() => setMobileDrawerOpen(o => !o)}>
+            <i className="ti ti-menu-2" />
+          </button>
+
+          <div className="topbar-title">
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
             <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {activeNavItem?.label || 'No page selected'}
+              {activeNavItem?.label || app.name}
             </span>
           </div>
+
           {buttons.length > 0 && (
-            <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <div className="topbar-actions">
               {buttons.map(btn => (
-                <button key={btn.id} onClick={() => handleButtonClick(btn)} style={{
-                  display:'flex', alignItems:'center', gap:6, padding:'6px 11px',
-                  border:'1px solid var(--border-2)', borderRadius:'var(--radius)',
-                  background:'transparent', color:'var(--text)', fontSize:13, cursor:'pointer', fontFamily:'inherit', fontWeight:500,
-                }}>
-                  <i className={`ti ${btn.icon}`} style={{ fontSize:14 }} />{btn.label}
+                <button key={btn.id} onClick={() => handleButtonClick(btn)} className="toolbar-btn">
+                  <i className={`ti ${btn.icon}`} style={{ fontSize:14 }} />
+                  <span className="desktop-only">{btn.label}</span>
                 </button>
               ))}
             </div>
@@ -133,86 +174,24 @@ export default function App() {
 
         {/* Tabs */}
         {pageTabs.length > 0 && (
-          <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid var(--border)', padding:'0 20px', overflowX:'auto', flexShrink:0 }}>
+          <div className="tab-bar">
             {pageTabs.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(p => ({ ...p, [activeNav]: tab.id }))} style={{
-                display:'flex', alignItems:'center', gap:6, padding:'11px 14px',
-                border:'none', background:'transparent',
-                borderBottom: activeTabId === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
-                color: activeTabId === tab.id ? 'var(--accent)' : 'var(--text-2)',
-                fontWeight: activeTabId === tab.id ? 600 : 400,
-                fontSize:13, cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit',
-              }}>
+              <button key={tab.id} onClick={() => setActiveTab(p => ({ ...p, [activeNav]: tab.id }))}
+                className={`tab-btn ${activeTabId === tab.id ? 'tab-btn--active' : ''}`}>
                 <i className={`ti ${tab.icon}`} style={{ fontSize:14 }} />
-                {tab.label}
+                <span className="tab-label">{tab.label}</span>
               </button>
             ))}
           </div>
         )}
 
         {/* Content */}
-        <div style={{ flex:1, overflowY:'auto', padding:24 }}>
-          {activeNav ? (() => {
-            const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
-            if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
-              return <ScheduleDashboard appId={appId} onSwitchTab={which => {
-                const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
-                if (target) setActiveTab(p => ({ ...p, [activeNav]: target.id }))
-              }} />
-            }
-            if (activeTabLabel === 'Task manager') {
-              return <TaskManager appId={appId} />
-            }
-            if (pageWidgets.length === 0) return (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:300, color:'var(--text-3)', gap:12 }}>
-                <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
-                <span style={{ fontSize:14 }}>Nothing here yet</span>
-              </div>
-            )
-            return (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:12 }}>
-                {pageWidgets.map(w => (
-                  <WidgetCard key={w.id} widget={w} appId={appId} />
-                ))}
-              </div>
-            )
-          })() : (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:300, color:'var(--text-3)', gap:12 }}>
-              <i className="ti ti-layout-sidebar" style={{ fontSize:44 }} />
-              <span style={{ fontSize:14 }}>Select a page from the sidebar</span>
-            </div>
-          )}
+        <div className="content">
+          {renderContent()}
         </div>
       </main>
 
       <Toast msg={toast.msg} type={toast.type} />
     </div>
-  )
-}
-
-function NavRow({ item, active, collapsed, onClick }) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <button onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display:'flex', alignItems:'center', gap:8,
-        padding: collapsed ? '8px 14px' : '7px 12px',
-        margin:'1px 6px', borderRadius:6, border:'none',
-        background: active ? 'var(--accent-bg)' : hovered ? 'var(--bg-3)' : 'transparent',
-        color: active ? 'var(--accent)' : 'var(--text-2)',
-        fontWeight: active ? 600 : 400, fontSize:13, cursor:'pointer',
-        width:'calc(100% - 12px)', textAlign:'left', whiteSpace:'nowrap', overflow:'hidden',
-        transition:'background 0.1s, color 0.1s',
-      }}>
-      <i className={`ti ${item.icon}`} style={{ fontSize:16, flexShrink:0 }} />
-      {!collapsed && <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>}
-      {!collapsed && item.badge && (
-        <span style={{ background:'var(--accent-bg)', color:'var(--accent-text)', fontSize:10, padding:'1px 6px', borderRadius:999, fontWeight:700 }}>
-          {item.badge}
-        </span>
-      )}
-    </button>
   )
 }
