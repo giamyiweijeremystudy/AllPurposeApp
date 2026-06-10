@@ -87,7 +87,7 @@ export function TabModal({ pageId, onClose, onSave }) {
 }
 
 // ── Widget Modal ─────────────────────────────────────────────
-export function WidgetModal({ pageId, editing, onClose, onSave }) {
+export function WidgetModal({ pageId, tabId, editing, onClose, onSave }) {
   const [type, setType] = useState(editing?.type || 'metric')
   const [label, setLabel] = useState(editing?.label || '')
   const [value, setValue] = useState(editing?.value || '')
@@ -113,7 +113,7 @@ export function WidgetModal({ pageId, editing, onClose, onSave }) {
       if (editing) {
         widget = await db.updateWidget(editing.id, payload)
       } else {
-        widget = await db.createWidget(pageId, payload)
+        widget = await db.createWidget(pageId, payload, tabId)
       }
       onSave(widget, !!editing); onClose()
     } finally { setSaving(false) }
