@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { loadState } from './db.js'
+import { ScheduleDashboard } from './ScheduleDashboard.jsx'
+import { TaskManager } from './TaskManager.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 
@@ -150,20 +152,31 @@ export default function App() {
 
         {/* Content */}
         <div style={{ flex:1, overflowY:'auto', padding:24 }}>
-          {activeNav ? (
-            pageWidgets.length === 0 ? (
+          {activeNav ? (() => {
+            const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
+            if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
+              return <ScheduleDashboard appId={appId} onSwitchTab={which => {
+                const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
+                if (target) setActiveTab(p => ({ ...p, [activeNav]: target.id }))
+              }} />
+            }
+            if (activeTabLabel === 'Task manager') {
+              return <TaskManager appId={appId} />
+            }
+            if (pageWidgets.length === 0) return (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:300, color:'var(--text-3)', gap:12 }}>
                 <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
                 <span style={{ fontSize:14 }}>Nothing here yet</span>
               </div>
-            ) : (
+            )
+            return (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:12 }}>
                 {pageWidgets.map(w => (
                   <WidgetCard key={w.id} widget={w} appId={appId} />
                 ))}
               </div>
             )
-          ) : (
+          })() : (
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:300, color:'var(--text-3)', gap:12 }}>
               <i className="ti ti-layout-sidebar" style={{ fontSize:44 }} />
               <span style={{ fontSize:14 }}>Select a page from the sidebar</span>
