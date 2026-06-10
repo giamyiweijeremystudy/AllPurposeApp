@@ -39,6 +39,11 @@ export default function App() {
     if (state?.app?.name) document.title = state.app.name
   }, [state?.app?.name])
 
+  const navigateTo = (id) => {
+    setActiveNav(id)
+    setMobileNavOpen(false)
+  }
+
   if (loading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, color:'var(--text-2)' }}>
       <i className="ti ti-loader-2 spin" style={{ fontSize:32 }} />
@@ -102,11 +107,11 @@ export default function App() {
       {/* ── MOBILE BACKDROP ── */}
       {mobileNavOpen && <div className="mob-backdrop" onClick={() => setMobileNavOpen(false)} />}
 
-      {/* ── SIDEBAR (desktop) / DRAWER (mobile) ── */}
+      {/* ── SIDEBAR ── */}
       <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileNavOpen ? 'sidebar--mobile-open' : ''}`}>
         <div className="sidebar-header">
           {!collapsed && <span className="sidebar-title">{app.name}</span>}
-          <button className="icon-btn" onClick={() => { setCollapsed(c => !c); setMobileDrawerOpen(false) }}>
+          <button className="icon-btn" onClick={() => setCollapsed(c => !c)}>
             <i className={`ti ${collapsed ? 'ti-layout-sidebar-right' : 'ti-layout-sidebar-left'}`} />
           </button>
         </div>
@@ -116,17 +121,13 @@ export default function App() {
             const items = navItems.filter(i => i.section_id === sec.id).sort((a,b) => a.sort_order - b.sort_order)
             return (
               <div key={sec.id} style={{ marginBottom:8 }}>
-                {!collapsed && (
-                  <div className="section-label">{sec.label}</div>
-                )}
+                {!collapsed && <div className="section-label">{sec.label}</div>}
                 {items.map(item => (
                   <button key={item.id} onClick={() => navigateTo(item.id)}
                     className={`nav-item ${activeNav === item.id ? 'nav-item--active' : ''} ${collapsed ? 'nav-item--collapsed' : ''}`}>
                     <i className={`ti ${item.icon}`} style={{ fontSize:16, flexShrink:0 }} />
                     {!collapsed && <span className="nav-item-label">{item.label}</span>}
-                    {!collapsed && item.badge && (
-                      <span className="nav-badge">{item.badge}</span>
-                    )}
+                    {!collapsed && item.badge && <span className="nav-badge">{item.badge}</span>}
                   </button>
                 ))}
               </div>
@@ -140,22 +141,21 @@ export default function App() {
 
         {/* Topbar */}
         <div className="topbar">
-          <button className="icon-btn mob-only" onClick={() => setMobileNavOpen(o => !o)} style={{ marginRight:4 }}>
+          <button className="icon-btn mob-only" onClick={() => setMobileNavOpen(o => !o)}>
             <i className="ti ti-menu-2" style={{ fontSize:20 }} />
           </button>
-        <div className="topbar-title">
+          <div className="topbar-title">
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
             <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {activeNavItem?.label || app.name}
             </span>
           </div>
-
           {buttons.length > 0 && (
             <div className="topbar-actions">
               {buttons.map(btn => (
                 <button key={btn.id} onClick={() => handleButtonClick(btn)} className="toolbar-btn">
                   <i className={`ti ${btn.icon}`} style={{ fontSize:14 }} />
-                  <span className="desktop-only">{btn.label}</span>
+                  {btn.label}
                 </button>
               ))}
             </div>
