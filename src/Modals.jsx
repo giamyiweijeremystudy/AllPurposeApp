@@ -128,6 +128,7 @@ export function WidgetModal({ pageId, editing, onClose, onSave }) {
           <option value="list">List</option>
           <option value="progress">Progress bar</option>
           <option value="status">Status indicator</option>
+          <option value="calendar">Calendar</option>
         </Select>
       </Field>
       <Field label="Title / Label">
