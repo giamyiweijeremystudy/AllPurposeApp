@@ -223,7 +223,7 @@ function MonthView({ current, allEvents, today, getColor, onDayClick, onEventCli
                   key={di}
                   onClick={() => onDayClick(d)}
                   style={{
-                    minHeight: 90, padding:'4px 6px',
+                    minHeight: 72, padding:'3px 5px',
                     borderRight: di < 6 ? '1px solid var(--border)' : 'none',
                     background: isToday ? 'var(--accent-bg)' : 'transparent',
                     cursor:'pointer',
@@ -301,7 +301,7 @@ function WeekView({ current, allEvents, today, getColor, onSlotClick, onEventCli
   const COL_W = `calc((100% - 48px) / 7)`
 
   return (
-    <div style={{ overflow:'auto', maxHeight:600 }}>
+    <div style={{ overflow:'auto', maxHeight:420 }}>
       {/* Day headers + all-day strip */}
       <div style={{ position:'sticky', top:0, background:'var(--bg)', zIndex:10, borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'grid', gridTemplateColumns:`48px repeat(7, 1fr)` }}>
@@ -358,14 +358,14 @@ function WeekView({ current, allEvents, today, getColor, onSlotClick, onEventCli
         {/* Hour labels + lines */}
         {HOURS.map(h => (
           <div key={h} style={{ display:'contents' }}>
-            <div style={{ height:48, borderBottom:'1px solid var(--border)', padding:'2px 6px 0 0', textAlign:'right', fontSize:10, color:'var(--text-3)', paddingTop:2 }}>
+            <div style={{ height:28, borderBottom:'1px solid var(--border)', padding:'1px 4px 0 0', textAlign:'right', fontSize:9, color:'var(--text-3)', paddingTop:1 }}>
               {h === 0 ? '' : `${h}:00`}
             </div>
             {days.map((d, di) => (
               <div
                 key={di}
                 onClick={() => { const dt = new Date(d); dt.setHours(h,0,0,0); onSlotClick(dt) }}
-                style={{ height:48, borderLeft:'1px solid var(--border)', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
+                style={{ height:28, borderLeft:'1px solid var(--border)', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               />
@@ -379,8 +379,8 @@ function WeekView({ current, allEvents, today, getColor, onSlotClick, onEventCli
           const e = new Date(ev.end_at)
           const dayIdx = days.findIndex(d => isSameDay(d, s))
           if (dayIdx === -1) return null
-          const top = (s.getHours() + s.getMinutes()/60) * 48
-          const height = Math.max(24, ((e - s) / 3600000) * 48)
+          const top = (s.getHours() + s.getMinutes()/60) * 28
+          const height = Math.max(18, ((e - s) / 3600000) * 28)
           const color = getColor(ev)
           // col: 48px gutter + dayIdx columns of (100%-48px)/7 each
           return (
@@ -414,7 +414,7 @@ function WeekView({ current, allEvents, today, getColor, onSlotClick, onEventCli
         {/* Current time line */}
         {isSameDay(today, days[0]) || days.some(d => isSameDay(d, today)) ? (() => {
           const now = new Date()
-          const top = 48 + (now.getHours() + now.getMinutes()/60) * 48
+          const top = 48 + (now.getHours() + now.getMinutes()/60) * 28
           const dayIdx = days.findIndex(d => isSameDay(d, today))
           if (dayIdx === -1) return null
           return (
