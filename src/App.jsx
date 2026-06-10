@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadState, deleteNavItem as dbDeleteNavItem, deleteTab as dbDeleteTab, deleteWidget as dbDeleteWidget, deleteButton as dbDeleteButton } from './db.js'
+import { loadState, deleteNavItem as dbDeleteNavItem, deleteTab as dbDeleteTab, deleteWidget as dbDeleteWidget, deleteButton as dbDeleteButton, updateSection as dbUpdateSection, deleteSection as dbDeleteSection } from './db.js'
 import { NavItemModal, TabModal, WidgetModal, ButtonModal, SettingsModal } from './Modals.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast, Btn } from './ui.jsx'
@@ -13,6 +13,8 @@ export default function App() {
   const [modal, setModal] = useState(null)
   const [editingWidget, setEditingWidget] = useState(null)
   const [toast, setToast] = useState({ msg: '', type: '' })
+  const [editingSection, setEditingSection] = useState(null) // { id, label }
+  const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'section'|'page', id, label }
   const toastTimer = useRef(null)
 
   const showToast = useCallback((msg, type = 'ok') => {
@@ -54,27 +56,55 @@ export default function App() {
   )
 
   const { app, sections, navItems, tabs, widgets, buttons } = state
+  const appId = app.id
 
   const pageTabs = tabs.filter(t => t.page_id === activeNav).sort((a,b) => a.sort_order - b.sort_order)
   const activeTabId = activeTab[activeNav] || pageTabs[0]?.id || null
-  const pageWidgets = widgets.filter(w => w.page_id === activeNav).sort((a,b) => a.sort_order - b.sort_order)
+
+  // Widgets are per-tab when tabs exist, per-page otherwise
+  const pageWidgets = activeTabId
+    ? widgets.filter(w => w.tab_id === activeTabId).sort((a,b) => a.sort_order - b.sort_order)
+    : widgets.filter(w => w.page_id === activeNav && !w.tab_id).sort((a,b) => a.sort_order - b.sort_order)
+
   const activeNavItem = navItems.find(i => i.id === activeNav)
 
-  const deleteNavItem = async id => {
-    await dbDeleteNavItem(id)
-    setState(s => ({
-      ...s,
-      navItems: s.navItems.filter(i => i.id !== id),
-      tabs: s.tabs.filter(t => t.page_id !== id),
-      widgets: s.widgets.filter(w => w.page_id !== id),
-    }))
-    if (activeNav === id) setActiveNav(navItems.find(i => i.id !== id)?.id || null)
-    showToast('Page removed')
+  // ── Section edit ─────────────────────────────────────────
+  const saveSection = async () => {
+    if (!editingSection?.label?.trim()) return
+    await dbUpdateSection(editingSection.id, { label: editingSection.label.trim() })
+    setState(s => ({ ...s, sections: s.sections.map(sec => sec.id === editingSection.id ? { ...sec, label: editingSection.label.trim() } : sec) }))
+    setEditingSection(null)
+    showToast('Section updated')
+  }
+
+  // ── Confirm delete ────────────────────────────────────────
+  const handleConfirmedDelete = async () => {
+    const { type, id } = confirmDelete
+    setConfirmDelete(null)
+    if (type === 'section') {
+      await dbDeleteSection(id)
+      setState(s => ({
+        ...s,
+        sections: s.sections.filter(sec => sec.id !== id),
+        navItems: s.navItems.filter(i => i.section_id !== id),
+      }))
+      showToast('Section deleted')
+    } else if (type === 'page') {
+      await dbDeleteNavItem(id)
+      setState(s => ({
+        ...s,
+        navItems: s.navItems.filter(i => i.id !== id),
+        tabs: s.tabs.filter(t => t.page_id !== id),
+        widgets: s.widgets.filter(w => w.page_id !== id),
+      }))
+      if (activeNav === id) setActiveNav(navItems.find(i => i.id !== id)?.id || null)
+      showToast('Page removed')
+    }
   }
 
   const deleteTab = async id => {
     await dbDeleteTab(id)
-    setState(s => ({ ...s, tabs: s.tabs.filter(t => t.id !== id) }))
+    setState(s => ({ ...s, tabs: s.tabs.filter(t => t.id !== id), widgets: s.widgets.filter(w => w.tab_id !== id) }))
     if (activeTabId === id) {
       const remaining = pageTabs.filter(t => t.id !== id)
       setActiveTab(p => ({ ...p, [activeNav]: remaining[0]?.id || null }))
@@ -108,7 +138,6 @@ export default function App() {
         display:'flex', flexDirection:'column',
         transition:'width 0.2s, min-width 0.2s', overflow:'hidden',
       }}>
-        {/* Header */}
         <div style={{ display:'flex', alignItems:'center', padding:'0 14px', height:50, borderBottom:'1px solid var(--border)', gap:8, flexShrink:0 }}>
           {!collapsed && <span style={{ fontWeight:700, fontSize:14, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{app.name}</span>}
           <button onClick={() => setCollapsed(c => !c)} style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', fontSize:16, display:'flex', flexShrink:0, padding:2 }}>
@@ -116,17 +145,51 @@ export default function App() {
           </button>
         </div>
 
-        {/* Nav */}
         <div style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
           {sections.sort((a,b) => a.sort_order - b.sort_order).map(sec => {
             const items = navItems.filter(i => i.section_id === sec.id).sort((a,b) => a.sort_order - b.sort_order)
+            const isEditing = editingSection?.id === sec.id
             return (
               <div key={sec.id} style={{ marginBottom:8 }}>
-                {!collapsed && <div style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', padding:'6px 14px 3px', textTransform:'uppercase', letterSpacing:'0.1em' }}>{sec.label}</div>}
+                {!collapsed && (
+                  <div style={{ display:'flex', alignItems:'center', padding:'4px 8px 2px', gap:4 }}>
+                    {isEditing ? (
+                      <>
+                        <input
+                          value={editingSection.label}
+                          onChange={e => setEditingSection(s => ({ ...s, label: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') saveSection(); if (e.key === 'Escape') setEditingSection(null) }}
+                          autoFocus
+                          style={{
+                            flex:1, fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em',
+                            background:'var(--bg)', border:'1px solid var(--accent)', borderRadius:4,
+                            color:'var(--text)', padding:'2px 5px', outline:'none', fontFamily:'inherit',
+                          }}
+                        />
+                        <button onClick={saveSection} style={{ background:'var(--accent)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', padding:'2px 6px', fontSize:11, fontFamily:'inherit' }}>✓</button>
+                        <button onClick={() => setEditingSection(null)} style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', padding:'2px 4px', fontSize:11 }}>✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ flex:1, fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.1em' }}>{sec.label}</span>
+                        <button
+                          onClick={() => setEditingSection({ id: sec.id, label: sec.label })}
+                          style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', padding:'1px 3px', fontSize:11, opacity:0.6, lineHeight:1 }}
+                          title="Edit section"
+                        ><i className="ti ti-pencil" style={{ fontSize:11 }} /></button>
+                        <button
+                          onClick={() => setConfirmDelete({ type:'section', id: sec.id, label: sec.label })}
+                          style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', padding:'1px 3px', fontSize:11, opacity:0.6, lineHeight:1 }}
+                          title="Delete section"
+                        ><i className="ti ti-trash" style={{ fontSize:11 }} /></button>
+                      </>
+                    )}
+                  </div>
+                )}
                 {items.map(item => (
                   <NavRow key={item.id} item={item} active={activeNav === item.id} collapsed={collapsed}
                     onClick={() => setActiveNav(item.id)}
-                    onDelete={() => deleteNavItem(item.id)}
+                    onDelete={() => setConfirmDelete({ type:'page', id: item.id, label: item.label })}
                   />
                 ))}
               </div>
@@ -146,7 +209,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Bottom */}
         <div style={{ borderTop:'1px solid var(--border)', padding:'6px 6px' }}>
           <NavBtn icon="ti-settings" label="Settings" collapsed={collapsed} onClick={() => setModal('settings')} />
         </div>
@@ -154,8 +216,6 @@ export default function App() {
 
       {/* ── MAIN ── */}
       <main style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
-
-        {/* Topbar */}
         <div style={{ height:50, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 20px', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
@@ -173,7 +233,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tabs */}
         {pageTabs.length > 0 && (
           <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid var(--border)', padding:'0 20px', overflowX:'auto', flexShrink:0 }}>
             {pageTabs.map(tab => (
@@ -188,13 +247,12 @@ export default function App() {
           </div>
         )}
 
-        {/* Content */}
         <div style={{ flex:1, overflowY:'auto', padding:24 }}>
           {activeNav ? (
             pageWidgets.length === 0 ? (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:300, color:'var(--text-3)', gap:14 }}>
                 <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
-                <span style={{ fontSize:14 }}>No widgets on this page yet</span>
+                <span style={{ fontSize:14 }}>No widgets on this {activeTabId ? 'tab' : 'page'} yet</span>
                 <Btn variant="primary" onClick={() => setModal('widget')} style={{ gap:6 }}>
                   <i className="ti ti-plus" /> Add first widget
                 </Btn>
@@ -202,7 +260,7 @@ export default function App() {
             ) : (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:12 }}>
                 {pageWidgets.map(w => (
-                  <WidgetCard key={w.id} widget={w} appId={app.id}
+                  <WidgetCard key={w.id} widget={w} appId={appId}
                     onDelete={deleteWidget}
                     onEdit={w => { setEditingWidget(w); setModal('widget') }}
                   />
@@ -221,7 +279,7 @@ export default function App() {
 
       {/* ── MODALS ── */}
       {modal === 'navItem' && (
-        <NavItemModal appId={app.id} sections={sections} onClose={() => setModal(null)}
+        <NavItemModal appId={appId} sections={sections} onClose={() => setModal(null)}
           onSave={({ item, newSection }) => {
             setState(s => ({
               ...s,
@@ -245,7 +303,7 @@ export default function App() {
       )}
 
       {modal === 'widget' && activeNav && (
-        <WidgetModal pageId={activeNav} editing={editingWidget} onClose={() => { setModal(null); setEditingWidget(null) }}
+        <WidgetModal pageId={activeNav} tabId={activeTabId} editing={editingWidget} onClose={() => { setModal(null); setEditingWidget(null) }}
           onSave={(widget, isEdit) => {
             setState(s => ({
               ...s,
@@ -259,7 +317,7 @@ export default function App() {
       )}
 
       {modal === 'button' && (
-        <ButtonModal appId={app.id} onClose={() => setModal(null)}
+        <ButtonModal appId={appId} onClose={() => setModal(null)}
           onSave={btn => {
             setState(s => ({ ...s, buttons: [...s.buttons, btn] }))
             showToast(`Button "${btn.label}" added`)
@@ -281,12 +339,42 @@ export default function App() {
         />
       )}
 
+      {/* ── CONFIRM DELETE POPUP ── */}
+      {confirmDelete && (
+        <div onClick={() => setConfirmDelete(null)} style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.45)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:'var(--bg)', borderRadius:'var(--radius-lg)', border:'1px solid var(--border)',
+            padding:24, width:320, boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
+          }}>
+            <div style={{ fontWeight:600, fontSize:15, marginBottom:8 }}>
+              Delete {confirmDelete.type === 'section' ? 'section' : 'page'}?
+            </div>
+            <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:20 }}>
+              Are you sure you want to delete <strong>"{confirmDelete.label}"</strong>?
+              {confirmDelete.type === 'section' && ' All pages inside it will also be deleted.'}
+              {confirmDelete.type === 'page' && ' All tabs and widgets on this page will also be deleted.'}
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={() => setConfirmDelete(null)} style={{
+                padding:'7px 14px', borderRadius:'var(--radius)', fontSize:13, cursor:'pointer',
+                background:'transparent', border:'1px solid var(--border-2)', color:'var(--text)', fontFamily:'inherit',
+              }}>Cancel</button>
+              <button onClick={handleConfirmedDelete} style={{
+                padding:'7px 14px', borderRadius:'var(--radius)', fontSize:13, cursor:'pointer',
+                background:'var(--danger)', border:'1px solid var(--danger)', color:'#fff', fontFamily:'inherit', fontWeight:500,
+              }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toast msg={toast.msg} type={toast.type} />
     </div>
   )
 }
-
-// ── Small pieces ──────────────────────────────────────────────
 
 function NavRow({ item, active, collapsed, onClick, onDelete }) {
   const [hovered, setHovered] = useState(false)
