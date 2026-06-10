@@ -268,19 +268,6 @@ button, input, select, textarea { font-family: inherit; }
 }
 .icon-btn:hover { color: var(--text); background: var(--bg-3); }
 
-/* ── Mobile drawer backdrop ── */
-.drawer-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 190;
-}
-
-/* ── Visibility helpers ── */
-.mobile-only { display: none; }
-.desktop-only { display: inline; }
-
 /* ── Toast ── */
 .toast {
   position: fixed; bottom: 24px; right: 24px; z-index: 9999;
@@ -297,34 +284,58 @@ button, input, select, textarea { font-family: inherit; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 .skeleton { background: var(--bg-3); border-radius: 4px; animation: pulse 1.4s ease infinite; }
 
+/* ── Bottom nav (hidden on desktop) ── */
+.bottom-nav {
+  display: none;
+}
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+.bottom-nav-item--active {
+  color: var(--accent);
+}
+.bottom-nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 /* ════════════════════════════════════════
    MOBILE  (≤ 768px)
 ════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .mobile-only { display: flex; }
-  .desktop-only { display: none; }
+  /* Hide desktop sidebar entirely */
+  .sidebar { display: none; }
 
-  /* Sidebar becomes a slide-in drawer from the left */
-  .sidebar {
+  /* Show bottom nav */
+  .bottom-nav {
+    display: flex;
     position: fixed;
-    top: 0; left: 0; bottom: 0;
-    width: 260px !important;
-    min-width: 260px !important;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: var(--shadow-lg);
-  }
-  .sidebar--open {
-    transform: translateX(0);
-  }
-  .drawer-backdrop {
-    display: block;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--border);
+    z-index: 200;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
   }
 
-  /* Main takes full width */
-  .main { width: 100%; }
+  /* Main takes full width, leave room for bottom nav */
+  .main { width: 100%; padding-bottom: 60px; }
 
-  /* Topbar: tighter padding */
+  /* Topbar: tighter padding, no sidebar toggle */
   .topbar { padding: 0 14px; }
 
   /* Content: smaller padding */
@@ -337,8 +348,8 @@ button, input, select, textarea { font-family: inherit; }
   /* Widget grid: single column on small screens */
   .widget-grid { grid-template-columns: 1fr; }
 
-  /* Toast: full-width bottom */
-  .toast { left: 14px; right: 14px; bottom: 16px; }
+  /* Toast: full-width, above bottom nav */
+  .toast { left: 14px; right: 14px; bottom: 70px; }
 }
 
 /* ════════════════════════════════════════
