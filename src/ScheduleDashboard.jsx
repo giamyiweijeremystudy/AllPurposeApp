@@ -115,7 +115,7 @@ export function ScheduleDashboard({ appId, onSwitchTab }) {
       </div>
 
       {/* Summary cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:20 }}>
+      <div className="dash-summary-grid">
         {[
           { label:'Today', value: todayEvents.length, icon:'ti-calendar-event', color:'var(--accent)' },
           { label:'Tomorrow', value: tomorrowEvents.length, icon:'ti-calendar', color:'#16a34a' },
@@ -133,7 +133,7 @@ export function ScheduleDashboard({ appId, onSwitchTab }) {
       </div>
 
       {/* Today + Tomorrow row */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+      <div className="dash-today-grid">
         <Panel title="Today's events" action={{ label:'View calendar →', onClick:() => onSwitchTab('calendar') }}>
           {todayEvents.length === 0
             ? <Empty>No events today</Empty>
@@ -151,7 +151,7 @@ export function ScheduleDashboard({ appId, onSwitchTab }) {
       </div>
 
       {/* Bottom 3-col row */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1.6fr 1.6fr', gap:12 }}>
+      <div className="dash-bottom-grid">
 
         {/* Quick note */}
         <Panel title="Quick note">
