@@ -106,13 +106,14 @@ export function TaskManager({ appId }) {
       {/* Add task */}
       <div style={{ background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', padding:16, marginBottom:16 }}>
         <div style={{ fontWeight:600, fontSize:13, marginBottom:12 }}>New task</div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <div className="task-add-row">
           <input
             value={newTitle}
             onChange={e => setNewTitle(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addTask()}
             placeholder="Task title…"
-            style={{ flex:1, minWidth:200, padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }}
+            className="task-add-title"
+            style={{ flex:1, padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }}
           />
           <input type="date" value={newDue} onChange={e => setNewDue(e.target.value)}
             style={{ padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }} />
