@@ -14,6 +14,7 @@ export default function App() {
   const [editingWidget, setEditingWidget] = useState(null)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const [editingSection, setEditingSection] = useState(null) // { id, label }
+  const [widgetEditMode, setWidgetEditMode] = useState(false)
   const [editingPage, setEditingPage] = useState(null) // { id, label }
   const [editingTab, setEditingTab] = useState(null) // { id, label }
   const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'section'|'page', id, label }
@@ -206,7 +207,7 @@ export default function App() {
                 )}
                 {items.map(item => (
                   <NavRow key={item.id} item={item} active={activeNav === item.id} collapsed={collapsed}
-                    onClick={() => setActiveNav(item.id)}
+                    onClick={() => { setActiveNav(item.id); setWidgetEditMode(false) }}
                     onDelete={() => setConfirmDelete({ type:'page', id: item.id, label: item.label })}
                   />
                 ))}
@@ -269,6 +270,15 @@ export default function App() {
             <ToolbarBtn icon="ti-layout-grid-add" label="Widget" onClick={() => { setEditingWidget(null); setModal('widget') }} />
             <ToolbarBtn icon="ti-layout-navbar-expand" label="Tab" onClick={() => setModal('tab')} />
             <ToolbarBtn icon="ti-cursor-text" label="Button" onClick={() => setModal('button')} />
+            <button onClick={() => setWidgetEditMode(m => !m)} style={{
+              display:'flex', alignItems:'center', gap:5, padding:'6px 12px',
+              border: widgetEditMode ? '1px solid var(--accent)' : '1px solid var(--border-2)',
+              borderRadius:'var(--radius)', fontSize:13, cursor:'pointer', fontFamily:'inherit', fontWeight: widgetEditMode ? 600 : 400,
+              background: widgetEditMode ? 'var(--accent-bg)' : 'transparent',
+              color: widgetEditMode ? 'var(--accent)' : 'var(--text-2)',
+            }}>
+              {widgetEditMode ? <><i className="ti ti-check" style={{ fontSize:14 }} /> Done</> : <><i className="ti ti-pencil" style={{ fontSize:14 }} /> Edit</>}
+            </button>
           </div>
         </div>
 
@@ -276,7 +286,7 @@ export default function App() {
           <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid var(--border)', padding:'0 20px', overflowX:'auto', flexShrink:0 }}>
             {pageTabs.map(tab => (
               <TabButton key={tab.id} tab={tab} active={activeTabId === tab.id}
-                onClick={() => { if (editingTab?.id !== tab.id) setActiveTab(p => ({ ...p, [activeNav]: tab.id })) }}
+                onClick={() => { if (editingTab?.id !== tab.id) { setActiveTab(p => ({ ...p, [activeNav]: tab.id })); setWidgetEditMode(false) } }}
                 onDelete={() => deleteTab(tab.id)}
                 editingTab={editingTab}
                 setEditingTab={setEditingTab}
@@ -302,12 +312,12 @@ export default function App() {
             ) : (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:12 }}>
                 {pageWidgets.map(w => (
-                  <WidgetCard key={w.id} widget={w} appId={appId}
+                  <WidgetCard key={w.id} widget={w} appId={appId} editMode={widgetEditMode}
                     onDelete={deleteWidget}
                     onEdit={w => { setEditingWidget(w); setModal('widget') }}
                   />
                 ))}
-                <AddWidgetPlaceholder onClick={() => { setEditingWidget(null); setModal('widget') }} />
+                {widgetEditMode && <AddWidgetPlaceholder onClick={() => { setEditingWidget(null); setModal('widget') }} />}
               </div>
             )
           ) : (
