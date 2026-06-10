@@ -11,6 +11,7 @@ export default function App() {
   const [activeNav, setActiveNav] = useState(null)
   const [activeTab, setActiveTab] = useState({})
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -98,8 +99,11 @@ export default function App() {
   return (
     <div className="app-shell">
 
+      {/* ── MOBILE BACKDROP ── */}
+      {mobileNavOpen && <div className="mob-backdrop" onClick={() => setMobileNavOpen(false)} />}
+
       {/* ── SIDEBAR (desktop) / DRAWER (mobile) ── */}
-      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
+      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileNavOpen ? 'sidebar--mobile-open' : ''}`}>
         <div className="sidebar-header">
           {!collapsed && <span className="sidebar-title">{app.name}</span>}
           <button className="icon-btn" onClick={() => { setCollapsed(c => !c); setMobileDrawerOpen(false) }}>
@@ -136,7 +140,10 @@ export default function App() {
 
         {/* Topbar */}
         <div className="topbar">
-          <div className="topbar-title">
+          <button className="icon-btn mob-only" onClick={() => setMobileNavOpen(o => !o)} style={{ marginRight:4 }}>
+            <i className="ti ti-menu-2" style={{ fontSize:20 }} />
+          </button>
+        <div className="topbar-title">
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
             <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {activeNavItem?.label || app.name}
@@ -173,17 +180,6 @@ export default function App() {
           {renderContent()}
         </div>
       </main>
-
-      {/* ── BOTTOM NAV (mobile only) ── */}
-      <nav className="bottom-nav">
-        {navItems.sort((a,b) => a.sort_order - b.sort_order).map(item => (
-          <button key={item.id} onClick={() => setActiveNav(item.id)}
-            className={`bottom-nav-item ${activeNav === item.id ? 'bottom-nav-item--active' : ''}`}>
-            <i className={`ti ${item.icon}`} style={{ fontSize:20 }} />
-            <span className="bottom-nav-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
 
       <Toast msg={toast.msg} type={toast.type} />
     </div>
