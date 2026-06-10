@@ -202,8 +202,10 @@ export function TaskManager({ appId }) {
 
 function TaskRow({ task, isLast, editing, editVal, onEdit, onSaveEdit, onCancelEdit, onEditVal, onComplete, onDelete, today }) {
   const [hovered, setHovered] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const isOverdue = task.due_date && task.due_date < today
   const isDueToday = task.due_date === today
+  const hasDesc = !!task.notes?.trim()
 
   const priorityColors = { high:'#dc2626', medium:'#d97706', low:'#16a34a' }
   const pColor = priorityColors[task.priority] || '#d97706'
