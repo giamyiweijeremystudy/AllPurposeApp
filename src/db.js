@@ -72,10 +72,14 @@ export async function deleteTab(id) {
 }
 
 // ── Widgets ─────────────────────────────────────────────────
-export async function createWidget(pageId, payload) {
-  const { data: existing } = await supabase.from('widgets').select('sort_order').eq('page_id', pageId).order('sort_order', { ascending: false }).limit(1)
+export async function createWidget(pageId, payload, tabId) {
+  const query = supabase.from('widgets').select('sort_order').eq('page_id', pageId)
+  if (tabId) query.eq('tab_id', tabId)
+  const { data: existing } = await query.order('sort_order', { ascending: false }).limit(1)
   const sort_order = (existing?.[0]?.sort_order ?? -1) + 1
-  const { data } = await supabase.from('widgets').insert({ page_id: pageId, ...payload, sort_order }).select().single()
+  const insert = { page_id: pageId, ...payload, sort_order }
+  if (tabId) insert.tab_id = tabId
+  const { data } = await supabase.from('widgets').insert(insert).select().single()
   return data
 }
 
