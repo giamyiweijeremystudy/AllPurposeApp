@@ -1,10 +1,30 @@
 import { useState } from 'react'
+import { CalendarWidget } from './CalendarWidget.jsx'
 
 const DOT_COLORS = ['#818cf8','#34d399','#fb923c','#60a5fa','#f472b6','#a78bfa','#38bdf8','#4ade80']
 
-export function WidgetCard({ widget, onDelete, onEdit }) {
+export function WidgetCard({ widget, onDelete, onEdit, appId }) {
   const [hovered, setHovered] = useState(false)
   const items = Array.isArray(widget.items) ? widget.items : []
+
+  if (widget.type === 'calendar') {
+    return (
+      <div style={{ position:'relative', gridColumn:'1 / -1' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {hovered && (
+          <div style={{ position:'absolute', top:8, right:8, display:'flex', gap:4, zIndex:10 }}>
+            <button onClick={() => onDelete(widget.id)} style={{
+              background:'var(--danger-bg)', border:'1px solid var(--danger)', borderRadius:6,
+              padding:'3px 7px', cursor:'pointer', color:'var(--danger)', fontSize:12,
+            }}><i className="ti ti-trash" /></button>
+          </div>
+        )}
+        <CalendarWidget appId={appId} />
+      </div>
+    )
+  }
 
   return (
     <div
