@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadState, deleteNavItem as dbDeleteNavItem, deleteTab as dbDeleteTab, deleteWidget as dbDeleteWidget, deleteButton as dbDeleteButton, updateSection as dbUpdateSection, deleteSection as dbDeleteSection } from './db.js'
+import { loadState, deleteNavItem as dbDeleteNavItem, deleteTab as dbDeleteTab, deleteWidget as dbDeleteWidget, deleteButton as dbDeleteButton, updateSection as dbUpdateSection, deleteSection as dbDeleteSection, updateNavItem as dbUpdateNavItem, updateTab as dbUpdateTab } from './db.js'
 import { NavItemModal, TabModal, WidgetModal, ButtonModal, SettingsModal } from './Modals.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast, Btn } from './ui.jsx'
@@ -14,6 +14,8 @@ export default function App() {
   const [editingWidget, setEditingWidget] = useState(null)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const [editingSection, setEditingSection] = useState(null) // { id, label }
+  const [editingPage, setEditingPage] = useState(null) // { id, label }
+  const [editingTab, setEditingTab] = useState(null) // { id, label }
   const [confirmDelete, setConfirmDelete] = useState(null) // { type: 'section'|'page', id, label }
   const toastTimer = useRef(null)
 
@@ -75,6 +77,22 @@ export default function App() {
     setState(s => ({ ...s, sections: s.sections.map(sec => sec.id === editingSection.id ? { ...sec, label: editingSection.label.trim() } : sec) }))
     setEditingSection(null)
     showToast('Section updated')
+  }
+
+  const savePage = async () => {
+    if (!editingPage?.label?.trim()) return
+    await dbUpdateNavItem(editingPage.id, { label: editingPage.label.trim() })
+    setState(s => ({ ...s, navItems: s.navItems.map(i => i.id === editingPage.id ? { ...i, label: editingPage.label.trim() } : i) }))
+    setEditingPage(null)
+    showToast('Page renamed')
+  }
+
+  const saveTab = async () => {
+    if (!editingTab?.label?.trim()) return
+    await dbUpdateTab(editingTab.id, { label: editingTab.label.trim() })
+    setState(s => ({ ...s, tabs: s.tabs.map(t => t.id === editingTab.id ? { ...t, label: editingTab.label.trim() } : t) }))
+    setEditingTab(null)
+    showToast('Tab renamed')
   }
 
   // ── Confirm delete ────────────────────────────────────────
@@ -219,9 +237,30 @@ export default function App() {
         <div style={{ height:50, borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 20px', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
-            <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {activeNavItem?.label || 'No page selected'}
-            </span>
+            {editingPage?.id === activeNav ? (
+              <>
+                <input
+                  value={editingPage.label}
+                  onChange={e => setEditingPage(p => ({ ...p, label: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') savePage(); if (e.key === 'Escape') setEditingPage(null) }}
+                  autoFocus
+                  style={{ fontWeight:600, fontSize:15, background:'var(--bg-2)', border:'1px solid var(--accent)', borderRadius:6, color:'var(--text)', padding:'3px 8px', outline:'none', fontFamily:'inherit', width:180 }}
+                />
+                <button onClick={savePage} style={{ background:'var(--accent)', border:'none', borderRadius:6, color:'#fff', cursor:'pointer', padding:'3px 10px', fontSize:12, fontFamily:'inherit' }}>✓</button>
+                <button onClick={() => setEditingPage(null)} style={{ background:'none', border:'1px solid var(--border-2)', borderRadius:6, color:'var(--text-2)', cursor:'pointer', padding:'3px 8px', fontSize:12 }}>✕</button>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {activeNavItem?.label || 'No page selected'}
+                </span>
+                {activeNavItem && (
+                  <button onClick={() => setEditingPage({ id: activeNav, label: activeNavItem.label })} style={{ background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', padding:'2px 4px', fontSize:13, opacity:0.5 }} title="Rename page">
+                    <i className="ti ti-pencil" style={{ fontSize:13 }} />
+                  </button>
+                )}
+              </>
+            )}
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
             {buttons.map(btn => (
@@ -237,8 +276,11 @@ export default function App() {
           <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid var(--border)', padding:'0 20px', overflowX:'auto', flexShrink:0 }}>
             {pageTabs.map(tab => (
               <TabButton key={tab.id} tab={tab} active={activeTabId === tab.id}
-                onClick={() => setActiveTab(p => ({ ...p, [activeNav]: tab.id }))}
+                onClick={() => { if (editingTab?.id !== tab.id) setActiveTab(p => ({ ...p, [activeNav]: tab.id })) }}
                 onDelete={() => deleteTab(tab.id)}
+                editingTab={editingTab}
+                setEditingTab={setEditingTab}
+                onSaveTab={saveTab}
               />
             ))}
             <button onClick={() => setModal('tab')} style={{ padding:'8px 10px', border:'none', background:'transparent', color:'var(--text-3)', cursor:'pointer', fontSize:16, flexShrink:0 }}>
@@ -427,28 +469,46 @@ function NavBtn({ icon, label, collapsed, onClick }) {
   )
 }
 
-function TabButton({ tab, active, onClick, onDelete }) {
+function TabButton({ tab, active, onClick, onDelete, editingTab, setEditingTab, onSaveTab }) {
   const [hovered, setHovered] = useState(false)
+  const isEditing = editingTab?.id === tab.id
   return (
-    <div style={{ position:'relative' }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      <button onClick={onClick} style={{
-        display:'flex', alignItems:'center', gap:6, padding:'11px 14px',
-        border:'none', background:'transparent',
-        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-        color: active ? 'var(--accent)' : 'var(--text-2)',
-        fontWeight: active ? 600 : 400, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit',
-      }}>
-        <i className={`ti ${tab.icon}`} style={{ fontSize:14 }} />
-        {tab.label}
-      </button>
-      {hovered && (
-        <span onClick={e => { e.stopPropagation(); onDelete() }} style={{
-          position:'absolute', right:2, top:'50%', transform:'translateY(-55%)',
-          fontSize:11, color:'var(--text-3)', cursor:'pointer', padding:'1px 3px', borderRadius:3,
-        }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
-        ><i className="ti ti-x" /></span>
+    <div style={{ position:'relative', display:'flex', alignItems:'center' }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {isEditing ? (
+        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 8px' }}>
+          <input
+            value={editingTab.label}
+            onChange={e => setEditingTab(t => ({ ...t, label: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') onSaveTab(); if (e.key === 'Escape') setEditingTab(null) }}
+            autoFocus
+            style={{ fontSize:13, background:'var(--bg-2)', border:'1px solid var(--accent)', borderRadius:5, color:'var(--text)', padding:'2px 7px', outline:'none', fontFamily:'inherit', width:100 }}
+          />
+          <button onClick={onSaveTab} style={{ background:'var(--accent)', border:'none', borderRadius:5, color:'#fff', cursor:'pointer', padding:'2px 7px', fontSize:12, fontFamily:'inherit' }}>✓</button>
+          <button onClick={() => setEditingTab(null)} style={{ background:'none', border:'1px solid var(--border-2)', borderRadius:5, color:'var(--text-2)', cursor:'pointer', padding:'2px 6px', fontSize:12 }}>✕</button>
+        </div>
+      ) : (
+        <button onClick={onClick} style={{
+          display:'flex', alignItems:'center', gap:6, padding:'11px 14px',
+          border:'none', background:'transparent',
+          borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+          color: active ? 'var(--accent)' : 'var(--text-2)',
+          fontWeight: active ? 600 : 400, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit',
+        }}>
+          <i className={`ti ${tab.icon}`} style={{ fontSize:14 }} />
+          {tab.label}
+          {hovered && (
+            <span style={{ display:'flex', alignItems:'center', gap:2, marginLeft:4 }}>
+              <span onClick={e => { e.stopPropagation(); setEditingTab({ id: tab.id, label: tab.label }) }} style={{ color:'var(--text-3)', fontSize:11, padding:'1px 2px', cursor:'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.color='var(--accent)'}
+                onMouseLeave={e => e.currentTarget.style.color='var(--text-3)'}
+              ><i className="ti ti-pencil" style={{ fontSize:11 }} /></span>
+              <span onClick={e => { e.stopPropagation(); onDelete() }} style={{ color:'var(--text-3)', fontSize:11, padding:'1px 2px', cursor:'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.color='var(--danger)'}
+                onMouseLeave={e => e.currentTarget.style.color='var(--text-3)'}
+              ><i className="ti ti-x" style={{ fontSize:11 }} /></span>
+            </span>
+          )}
+        </button>
       )}
     </div>
   )
