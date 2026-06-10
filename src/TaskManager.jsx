@@ -32,6 +32,18 @@ export function TaskManager({ appId }) {
       sort_order: tasks.length,
     }).select().single()
     setTasks(prev => [...prev, data])
+    // If due date set, also create an all-day calendar event so it shows on calendar
+    if (newDue) {
+      await supabase.from('events').insert({
+        app_id: appId,
+        title: newTitle.trim(),
+        start_at: newDue + 'T00:00:00',
+        end_at: newDue + 'T23:59:59',
+        all_day: true,
+        color: newPriority === 'high' ? '#dc2626' : newPriority === 'low' ? '#16a34a' : '#d97706',
+        description: 'Task due date',
+      })
+    }
     setNewTitle(''); setNewDue(''); setNewPriority('medium')
   }
 
@@ -51,8 +63,21 @@ export function TaskManager({ appId }) {
   }
 
   const saveEdit = async (id) => {
+    const prev = tasks.find(t => t.id === id)
     await supabase.from('tasks').update(editVal).eq('id', id)
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...editVal } : t))
+    setTasks(p => p.map(t => t.id === id ? { ...t, ...editVal } : t))
+    // If due_date was just added, create a calendar event
+    if (editVal.due_date && !prev?.due_date) {
+      await supabase.from('events').insert({
+        app_id: appId,
+        title: editVal.title || prev.title,
+        start_at: editVal.due_date + 'T00:00:00',
+        end_at: editVal.due_date + 'T23:59:59',
+        all_day: true,
+        color: editVal.priority === 'high' ? '#dc2626' : editVal.priority === 'low' ? '#16a34a' : '#d97706',
+        description: 'Task due date',
+      })
+    }
     setEditingId(null)
   }
 
