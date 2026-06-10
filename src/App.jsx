@@ -11,7 +11,6 @@ export default function App() {
   const [activeNav, setActiveNav] = useState(null)
   const [activeTab, setActiveTab] = useState({})
   const [collapsed, setCollapsed] = useState(false)
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -38,12 +37,6 @@ export default function App() {
   useEffect(() => {
     if (state?.app?.name) document.title = state.app.name
   }, [state?.app?.name])
-
-  // Close drawer on nav
-  const navigateTo = (id) => {
-    setActiveNav(id)
-    setMobileDrawerOpen(false)
-  }
 
   if (loading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, color:'var(--text-2)' }}>
@@ -105,13 +98,8 @@ export default function App() {
   return (
     <div className="app-shell">
 
-      {/* ── MOBILE DRAWER BACKDROP ── */}
-      {mobileDrawerOpen && (
-        <div className="drawer-backdrop" onClick={() => setMobileDrawerOpen(false)} />
-      )}
-
       {/* ── SIDEBAR (desktop) / DRAWER (mobile) ── */}
-      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''} ${mobileDrawerOpen ? 'sidebar--open' : ''}`}>
+      <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
         <div className="sidebar-header">
           {!collapsed && <span className="sidebar-title">{app.name}</span>}
           <button className="icon-btn" onClick={() => { setCollapsed(c => !c); setMobileDrawerOpen(false) }}>
@@ -148,11 +136,6 @@ export default function App() {
 
         {/* Topbar */}
         <div className="topbar">
-          {/* Mobile hamburger */}
-          <button className="icon-btn mobile-only" onClick={() => setMobileDrawerOpen(o => !o)}>
-            <i className="ti ti-menu-2" />
-          </button>
-
           <div className="topbar-title">
             {activeNavItem && <i className={`ti ${activeNavItem.icon}`} style={{ fontSize:17, color:'var(--text-2)', flexShrink:0 }} />}
             <span style={{ fontWeight:600, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -190,6 +173,17 @@ export default function App() {
           {renderContent()}
         </div>
       </main>
+
+      {/* ── BOTTOM NAV (mobile only) ── */}
+      <nav className="bottom-nav">
+        {navItems.sort((a,b) => a.sort_order - b.sort_order).map(item => (
+          <button key={item.id} onClick={() => setActiveNav(item.id)}
+            className={`bottom-nav-item ${activeNav === item.id ? 'bottom-nav-item--active' : ''}`}>
+            <i className={`ti ${item.icon}`} style={{ fontSize:20 }} />
+            <span className="bottom-nav-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
       <Toast msg={toast.msg} type={toast.type} />
     </div>
