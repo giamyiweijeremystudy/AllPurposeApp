@@ -114,6 +114,99 @@ export function ScheduleDashboard({ appId, onSwitchTab }) {
         <div style={{ fontSize:13, color:'var(--text-3)', marginTop:2 }}>{dateLabel}</div>
       </div>
 
+
+      {/* Quick actions */}
+      <div className="dash-quick-grid">
+        {[
+          {
+            label: 'Calendar',
+            sub: 'View & manage events',
+            onClick: () => onSwitchTab('calendar'),
+            color: '#4f46e5',
+            bg: '#eef2ff',
+            svg: (
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="8" y="14" width="48" height="42" rx="6" fill="#c7d2fe"/>
+                <rect x="8" y="14" width="48" height="14" rx="6" fill="#4f46e5"/>
+                <rect x="8" y="22" width="48" height="6" fill="#4f46e5"/>
+                <rect x="18" y="10" width="4" height="10" rx="2" fill="#4f46e5"/>
+                <rect x="42" y="10" width="4" height="10" rx="2" fill="#4f46e5"/>
+                <rect x="16" y="36" width="8" height="8" rx="2" fill="#4f46e5" opacity="0.7"/>
+                <rect x="28" y="36" width="8" height="8" rx="2" fill="#4f46e5" opacity="0.4"/>
+                <rect x="40" y="36" width="8" height="8" rx="2" fill="#4f46e5" opacity="0.2"/>
+                <rect x="16" y="48" width="8" height="4" rx="2" fill="#4f46e5" opacity="0.4"/>
+                <rect x="28" y="48" width="8" height="4" rx="2" fill="#4f46e5" opacity="0.7"/>
+              </svg>
+            ),
+          },
+          {
+            label: 'Task Manager',
+            sub: 'Track your to-dos',
+            onClick: () => onSwitchTab('tasks'),
+            color: '#16a34a',
+            bg: '#f0fdf4',
+            svg: (
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="10" width="44" height="44" rx="6" fill="#bbf7d0"/>
+                <rect x="18" y="20" width="28" height="4" rx="2" fill="#16a34a" opacity="0.3"/>
+                <rect x="18" y="30" width="28" height="4" rx="2" fill="#16a34a" opacity="0.3"/>
+                <rect x="18" y="40" width="18" height="4" rx="2" fill="#16a34a" opacity="0.3"/>
+                <circle cx="13" cy="22" r="4" fill="#16a34a"/>
+                <path d="M11 22l1.5 1.5L15 20" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="13" cy="32" r="4" fill="#16a34a"/>
+                <path d="M11 32l1.5 1.5L15 30" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="13" cy="42" r="4" fill="#d1fae5" stroke="#16a34a" strokeWidth="1.5"/>
+              </svg>
+            ),
+          },
+          {
+            label: 'Add Event',
+            sub: 'Schedule something new',
+            onClick: () => setEventModal({}),
+            color: '#0891b2',
+            bg: '#ecfeff',
+            svg: (
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="8" y="14" width="48" height="42" rx="6" fill="#cffafe"/>
+                <rect x="8" y="14" width="48" height="14" rx="6" fill="#0891b2"/>
+                <rect x="8" y="22" width="48" height="6" fill="#0891b2"/>
+                <rect x="18" y="10" width="4" height="10" rx="2" fill="#0891b2"/>
+                <rect x="42" y="10" width="4" height="10" rx="2" fill="#0891b2"/>
+                <circle cx="32" cy="42" r="10" fill="#0891b2"/>
+                <rect x="30" y="37" width="4" height="10" rx="2" fill="white"/>
+                <rect x="27" y="40" width="10" height="4" rx="2" fill="white"/>
+              </svg>
+            ),
+          },
+          {
+            label: 'Add Task',
+            sub: 'Capture a new to-do',
+            onClick: () => onSwitchTab('tasks'),
+            color: '#d97706',
+            bg: '#fffbeb',
+            svg: (
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="10" width="44" height="44" rx="6" fill="#fde68a"/>
+                <rect x="20" y="24" width="24" height="3" rx="1.5" fill="#d97706" opacity="0.4"/>
+                <rect x="20" y="31" width="24" height="3" rx="1.5" fill="#d97706" opacity="0.4"/>
+                <rect x="20" y="38" width="16" height="3" rx="1.5" fill="#d97706" opacity="0.4"/>
+                <circle cx="46" cy="46" r="10" fill="#d97706"/>
+                <rect x="44" y="41" width="4" height="10" rx="2" fill="white"/>
+                <rect x="41" y="44" width="10" height="4" rx="2" fill="white"/>
+              </svg>
+            ),
+          },
+        ].map(({ label, sub, onClick, color, bg, svg }) => (
+          <button key={label} onClick={onClick} className="quick-action-card" style={{ '--qa-color': color, '--qa-bg': bg }}>
+            <div className="quick-action-img">{svg}</div>
+            <div className="quick-action-text">
+              <div className="quick-action-label">{label}</div>
+              <div className="quick-action-sub">{sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
       <div className="dash-summary-grid">
         {[
