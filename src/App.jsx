@@ -202,7 +202,7 @@ export default function App() {
             ) : (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:12 }}>
                 {pageWidgets.map(w => (
-                  <WidgetCard key={w.id} widget={w}
+                  <WidgetCard key={w.id} widget={w} appId={app.id}
                     onDelete={deleteWidget}
                     onEdit={w => { setEditingWidget(w); setModal('widget') }}
                   />
