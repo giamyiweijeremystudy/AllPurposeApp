@@ -82,6 +82,22 @@ export const PAGE_ILLUSTRATIONS = {
       <ellipse cx="32" cy="20" rx="18" ry="7" fill="none" stroke="#dc2626" strokeWidth="1.5"/>
     </svg>
   ),
+  'ti-letter-w': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="6" width="12" height="12" rx="2" fill="#538d4e"/>
+      <rect x="20" y="6" width="12" height="12" rx="2" fill="#b59f3b"/>
+      <rect x="34" y="6" width="12" height="12" rx="2" fill="#538d4e"/>
+      <rect x="48" y="6" width="12" height="12" rx="2" fill="#3a3a3c"/>
+      <rect x="6" y="20" width="12" height="12" rx="2" fill="#3a3a3c"/>
+      <rect x="20" y="20" width="12" height="12" rx="2" fill="#538d4e"/>
+      <rect x="34" y="20" width="12" height="12" rx="2" fill="#b59f3b"/>
+      <rect x="48" y="20" width="12" height="12" rx="2" fill="#3a3a3c"/>
+      <rect x="6" y="34" width="12" height="12" rx="2" fill="var(--border-2)"/>
+      <rect x="20" y="34" width="12" height="12" rx="2" fill="var(--border-2)"/>
+      <rect x="34" y="34" width="12" height="12" rx="2" fill="var(--border-2)"/>
+      <rect x="48" y="34" width="12" height="12" rx="2" fill="var(--border-2)"/>
+    </svg>
+  ),
   // fallback for unknown icons
   'default': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -104,6 +120,7 @@ export const PAGE_COLORS = {
   'ti-home':     '#0284c7',
   'ti-mail':     '#2563eb',
   'ti-database': '#dc2626',
+  'ti-letter-w': '#538d4e',
   'default':     '#6b7280',
 }
 
@@ -117,6 +134,7 @@ export const PAGE_BG = {
   'ti-home':     '#e0f2fe',
   'ti-mail':     '#dbeafe',
   'ti-database': '#fef2f2',
+  'ti-letter-w': '#f0fdf4',
   'default':     '#f9fafb',
 }
 
