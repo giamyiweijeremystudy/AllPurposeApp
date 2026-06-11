@@ -4,6 +4,7 @@ import { ScheduleDashboard } from './ScheduleDashboard.jsx'
 import { TaskManager } from './TaskManager.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
+import { Overview } from './Overview.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -80,6 +81,10 @@ export default function App() {
         <span style={{ fontSize:14 }}>Select a page</span>
       </div>
     )
+    // Overview page — no tabs, just the launcher grid
+    if (activeNavItem?.label === 'Overview' && pageTabs.length === 0) {
+      return <Overview navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} />
+    }
     const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
     if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
       return <ScheduleDashboard appId={appId} onSwitchTab={which => {
