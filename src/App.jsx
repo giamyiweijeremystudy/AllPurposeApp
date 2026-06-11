@@ -193,6 +193,21 @@ export default function App() {
               ))}
             </div>
           )}
+          {/* Home button — always visible, links to Overview Quick Access */}
+          {(() => {
+            const overviewItem = navItems.find(i => i.label === 'Overview')
+            if (!overviewItem || activeNav === overviewItem.id) return null
+            return (
+              <button
+                onClick={() => navigateTo(overviewItem.id)}
+                className="icon-btn"
+                title="Home"
+                style={{ flexShrink:0 }}
+              >
+                <i className="ti ti-home" style={{ fontSize:18 }} />
+              </button>
+            )
+          })()}
         </div>
 
         {/* Tabs */}
