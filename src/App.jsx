@@ -6,6 +6,7 @@ import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
 import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
+import { Wordle } from './Wordle.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -121,6 +122,7 @@ export default function App() {
       }} />
     }
     if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
+    if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (pageWidgets.length === 0) return (
       <div className="empty-state">
         <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
