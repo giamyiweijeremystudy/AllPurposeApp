@@ -25,7 +25,7 @@ function useIsMobile() {
   return mobile
 }
 
-export function CalendarWidget({ appId }) {
+export function CalendarWidget({ appId, mobileOffset = 50 }) {
   const [view, setView] = useState('month')
   const [current, setCurrent] = useState(new Date())
   const [rawEvents, setRawEvents] = useState([])
@@ -213,7 +213,7 @@ export function CalendarWidget({ appId }) {
       }
 
       {eventModal !== null && (
-        <EventModal event={eventModal.event} categories={categories} appId={appId}
+        <EventModal event={eventModal.event} categories={categories} appId={appId} offsetTop={mobileOffset}
           onClose={() => setEventModal(null)} onSave={handleSaveEvent} onDelete={handleDeleteEvent} />
       )}
       {catModal && (
