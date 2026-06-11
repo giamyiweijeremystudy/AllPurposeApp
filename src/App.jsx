@@ -45,17 +45,28 @@ export default function App() {
     setMobileNavOpen(false)
   }
 
-  if (loading) return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, color:'var(--text-2)' }}>
-      <i className="ti ti-loader-2 spin" style={{ fontSize:32 }} />
-      <span style={{ fontSize:13 }}>Loading…</span>
-    </div>
-  )
-
-  if (!state) return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, color:'var(--text-2)' }}>
-      <i className="ti ti-alert-circle" style={{ fontSize:32, color:'var(--danger)' }} />
-      <span style={{ fontSize:13 }}>Could not connect. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.</span>
+  // Show shell immediately while loading — faster perceived performance
+  if (loading || !state) return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="skeleton" style={{ height:14, width:80, borderRadius:4 }} />
+        </div>
+        <div className="sidebar-nav" style={{ padding:'16px 12px', display:'flex', flexDirection:'column', gap:8 }}>
+          {[60,80,70,55,75].map((w,i) => <div key={i} className="skeleton" style={{ height:12, width:`${w}%`, borderRadius:4 }} />)}
+        </div>
+      </aside>
+      <main className="main">
+        <div className="topbar">
+          <div className="skeleton" style={{ height:14, width:120, borderRadius:4 }} />
+        </div>
+        <div className="content" style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh', flexDirection:'column', gap:12, color:'var(--text-3)' }}>
+          {!loading && !state
+            ? <><i className="ti ti-alert-circle" style={{ fontSize:32, color:'var(--danger)' }} /><span style={{ fontSize:13 }}>Could not connect. Check env vars.</span></>
+            : <><i className="ti ti-loader-2 spin" style={{ fontSize:24 }} /><span style={{ fontSize:12 }}>Loading…</span></>
+          }
+        </div>
+      </main>
     </div>
   )
 
