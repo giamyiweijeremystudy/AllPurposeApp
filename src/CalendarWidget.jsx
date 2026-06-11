@@ -344,16 +344,17 @@ function MonthView({ current, allEvents, today, getColor, onDayClick, onEventCli
               const isToday = isSameDay(d, today)
               const isCurrentMonth = isSameMonth(d, current)
 
-              // Mobile: show small coloured pills with truncated title
-              const dayEvents = isMobile
+              // Mobile: show 1 pill + "+N more" — never expand the cell
+              const allDayEvs = isMobile
                 ? getEventsForRange(allEvents, d, addDays(d, 1))
                     .filter(e => isSameDay(new Date(e.start_at), d))
-                    .slice(0, 2)
                 : []
+              const dayEvents = allDayEvs.slice(0, 1)
+              const moreCount = allDayEvs.length - 1
 
               return (
                 <div key={di} onClick={() => onDayClick(d)} style={{
-                  minHeight: isMobile ? 62 : 72,
+                  height: isMobile ? 62 : undefined, minHeight: isMobile ? undefined : 72,
                   padding: isMobile ? '3px 2px 4px' : '4px 6px',
                   borderRight: di < 6 ? '1px solid var(--border)' : 'none',
                   background: isToday ? 'var(--accent-bg)' : 'transparent',
@@ -368,26 +369,21 @@ function MonthView({ current, allEvents, today, getColor, onDayClick, onEventCli
                     margin: isMobile ? '0 auto 3px' : '0 0 2px',
                   }}>{d.getDate()}</div>
 
-                  {/* Mobile: small pills */}
-                  {isMobile && dayEvents.length > 0 && (
+                  {/* Mobile: 1 pill + "+N more" badge */}
+                  {isMobile && allDayEvs.length > 0 && (
                     <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
                       {dayEvents.map((ev, ei) => (
-                        <div key={ei}
-                          style={{
-                            background: getColor(ev),
-                            color: '#fff',
-                            fontSize: 9,
-                            fontWeight: 600,
-                            padding: '1px 4px',
-                            borderRadius: 3,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            opacity: ev._isHoliday ? 0.75 : 1,
-                          }}
-                          title={ev.title}
-                        >{ev.title}</div>
+                        <div key={ei} style={{
+                          background: getColor(ev), color:'#fff',
+                          fontSize: 9, fontWeight: 600,
+                          padding: '1px 3px', borderRadius: 3,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          opacity: ev._isHoliday ? 0.75 : 1,
+                        }} title={ev.title}>{ev.title}</div>
                       ))}
+                      {moreCount > 0 && (
+                        <div style={{ fontSize:9, color:'var(--text-3)', fontWeight:600, paddingLeft:2 }}>+{moreCount}</div>
+                      )}
                     </div>
                   )}
                 </div>
