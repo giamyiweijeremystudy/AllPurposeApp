@@ -246,13 +246,13 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
       {/* Bottom 3-col row */}
       <div className="dash-bottom-grid">
 
-        {/* Quick note */}
-        <Panel title="Quick note">
+        {/* Quick task */}
+        <Panel title="Quick task">
           <textarea
             value={quickNote}
             onChange={e => setQuickNote(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveQuickNote() } }}
-            placeholder="Jot something down…&#10;Press Enter to save"
+            placeholder="Add a quick task…&#10;Press Enter to save"
             style={{
               width:'100%', minHeight:100, padding:'8px 10px',
               border:'1px solid var(--border-2)', borderRadius:'var(--radius)',
@@ -268,7 +268,7 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
             color:'#fff', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:500,
             transition:'background 0.2s',
           }}>
-            {noteSaved ? '✓ Saved as task' : 'Save as task'}
+            {noteSaved ? '✓ Task added' : 'Add task'}
           </button>
         </Panel>
 
