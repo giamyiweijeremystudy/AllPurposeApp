@@ -2,11 +2,11 @@ import { CalendarWidget } from './CalendarWidget.jsx'
 
 const DOT_COLORS = ['#818cf8','#34d399','#fb923c','#60a5fa','#f472b6','#a78bfa','#38bdf8','#4ade80']
 
-export function WidgetCard({ widget, appId }) {
+export function WidgetCard({ widget, appId, calendarKey, mobileOffset }) {
   if (widget.type === 'calendar') {
     return (
       <div style={{ gridColumn:'1 / -1' }}>
-        <CalendarWidget appId={appId} />
+        <CalendarWidget key={calendarKey} appId={appId} mobileOffset={mobileOffset} />
       </div>
     )
   }
