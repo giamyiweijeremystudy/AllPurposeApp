@@ -331,9 +331,6 @@ button, input, select, textarea { font-family: inherit; }
   /* Main full width, no padding-bottom needed */
   .main { width: 100%; }
 
-  /* iOS: prevent zoom on input focus — only actual form inputs, not buttons */
-  input[type], select, textarea { font-size: 16px !important; }
-
   /* Topbar */
   .topbar { padding: 0 14px; gap: 6px; }
 
