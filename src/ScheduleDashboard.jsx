@@ -9,7 +9,7 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
 }
 
-export function ScheduleDashboard({ appId, onSwitchTab }) {
+export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
   const [categories, setCategories] = useState([])
@@ -341,6 +341,7 @@ export function ScheduleDashboard({ appId, onSwitchTab }) {
           event={eventModal.event}
           categories={categories}
           appId={appId}
+          offsetTop={mobileOffset}
           onClose={() => setEventModal(null)}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
