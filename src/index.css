@@ -232,6 +232,7 @@ button, input, select, textarea { font-family: inherit; }
   overflow-y: auto;
   padding: 24px;
   -webkit-overflow-scrolling: touch;
+  position: relative;
 }
 
 /* ── Widget grid ── */
