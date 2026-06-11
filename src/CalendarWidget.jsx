@@ -359,6 +359,7 @@ function MonthView({ current, allEvents, today, getColor, onDayClick, onEventCli
                   borderRight: di < 6 ? '1px solid var(--border)' : 'none',
                   background: isToday ? 'var(--accent-bg)' : 'transparent',
                   cursor:'pointer',
+                  overflow: 'hidden',
                 }}>
                   <div style={{
                     width: isMobile ? 22 : 24, height: isMobile ? 22 : 24,
@@ -379,6 +380,7 @@ function MonthView({ current, allEvents, today, getColor, onDayClick, onEventCli
                           padding: '1px 3px', borderRadius: 3,
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                           opacity: ev._isHoliday ? 0.75 : 1,
+                          maxWidth: '100%',
                         }} title={ev.title}>{ev.title}</div>
                       ))}
                       {moreCount > 0 && (
