@@ -161,7 +161,7 @@ export default function App() {
 
         {/* Topbar */}
         <div className="topbar">
-          <button className="icon-btn mob-only" onClick={() => setMobileNavOpen(o => !o)}>
+          <button className="icon-btn mob-only" onClick={() => { setMobileNavOpen(o => !o); setCalendarKey(k => k + 1) }}>
             <i className="ti ti-menu-2" style={{ fontSize:20 }} />
           </button>
           <div className="topbar-title">
