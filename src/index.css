@@ -285,31 +285,6 @@ button, input, select, textarea { font-family: inherit; }
 .skeleton { background: var(--bg-3); border-radius: 4px; animation: pulse 1.4s ease infinite; }
 
 
-.bottom-nav-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 8px 4px 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  cursor: pointer;
-  font-size: 10px;
-  font-family: inherit;
-  transition: color 0.15s;
-}
-.bottom-nav-item--active {
-  color: var(--accent);
-}
-.bottom-nav-label {
-  font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 /* ════════════════════════════════════════
    MOBILE  (≤ 768px)
 ════════════════════════════════════════ */
@@ -356,8 +331,8 @@ button, input, select, textarea { font-family: inherit; }
   /* Main full width, no padding-bottom needed */
   .main { width: 100%; }
 
-  /* iOS: prevent zoom on input focus */
-  input, select, textarea { font-size: 16px !important; }
+  /* iOS: prevent zoom on input focus — only actual form inputs, not buttons */
+  input[type], select, textarea { font-size: 16px !important; }
 
   /* Topbar */
   .topbar { padding: 0 14px; gap: 6px; }
