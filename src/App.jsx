@@ -13,6 +13,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState({})
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [calendarKey, setCalendarKey] = useState(0)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -85,6 +86,9 @@ export default function App() {
     else if (btn.action === 'toast') showToast(btn.prompt || btn.label)
   }
 
+  const TAB_BAR_H = pageTabs.length > 0 ? 44 : 0
+  const mobileOffset = 50 + TAB_BAR_H
+
   const renderContent = () => {
     if (!activeNav) return (
       <div className="empty-state">
@@ -98,7 +102,7 @@ export default function App() {
     }
     const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
     if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
-      return <ScheduleDashboard appId={appId} onSwitchTab={which => {
+      return <ScheduleDashboard appId={appId} mobileOffset={mobileOffset} onSwitchTab={which => {
         const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
         if (target) setActiveTab(p => ({ ...p, [activeNav]: target.id }))
       }} />
@@ -112,7 +116,7 @@ export default function App() {
     )
     return (
       <div className="widget-grid">
-        {pageWidgets.map(w => <WidgetCard key={w.id} widget={w} appId={appId} />)}
+        {pageWidgets.map(w => <WidgetCard key={w.id} widget={w} appId={appId} calendarKey={calendarKey} mobileOffset={mobileOffset} />)}
       </div>
     )
   }
@@ -182,7 +186,7 @@ export default function App() {
         {pageTabs.length > 0 && (
           <div className="tab-bar">
             {pageTabs.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(p => ({ ...p, [activeNav]: tab.id }))}
+              <button key={tab.id} onClick={() => { setActiveTab(p => ({ ...p, [activeNav]: tab.id })); setCalendarKey(k => k + 1) }}
                 className={`tab-btn ${activeTabId === tab.id ? 'tab-btn--active' : ''}`}>
                 <i className={`ti ${tab.icon}`} style={{ fontSize:14 }} />
                 <span className="tab-label">{tab.label}</span>
