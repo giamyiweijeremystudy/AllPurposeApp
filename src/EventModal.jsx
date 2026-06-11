@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useState } from 'react'
-import { Field, Input, Textarea, Select, Btn } from './ui.jsx'
+import { Field, Input, Textarea, Select, Btn, Modal, BtnRow } from './ui.jsx'
 import { toDateStr, formatTime, formatDate } from './calendarUtils.js'
 
 const COLORS = [
@@ -8,65 +8,115 @@ const COLORS = [
   '#16a34a','#0891b2','#0284c7','#6b7280','#1e293b',
 ]
 
+const TOPBAR_H = 50 // matches --topbar-h
+
+function isMobileView() {
+  return window.innerWidth <= 768
+}
+
 // ── Router ───────────────────────────────────────────────────
 export function EventModal({ event, categories, appId, onClose, onSave, onDelete }) {
   const isNew = !event?.id
   const [mode, setMode] = useState(isNew ? 'edit' : 'view')
-  if (mode === 'view') return <EventViewPage event={event} categories={categories} onClose={onClose} onEdit={() => setMode('edit')} onDelete={onDelete} />
-  return <EventEditPage event={event} categories={categories} onClose={onClose} onSave={onSave} onDelete={onDelete} onViewMode={isNew ? onClose : () => setMode('view')} isNew={isNew} />
+  if (mode === 'view') {
+    return <EventViewModal event={event} categories={categories} onClose={onClose} onEdit={() => setMode('edit')} onDelete={onDelete} />
+  }
+  return <EventEditModal event={event} categories={categories} onClose={onClose} onSave={onSave} onDelete={onDelete} onViewMode={isNew ? onClose : () => setMode('view')} isNew={isNew} />
 }
 
-// ── Shared full-page wrapper ──────────────────────────────────
-function PageWrapper({ onBack, backLabel = '← Back', title, children, footer }) {
-  return createPortal(
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9000,
-      background: 'var(--bg)',
-      display: 'flex', flexDirection: 'column',
-      overflowY: 'auto',
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '0 20px', height: 52, flexShrink: 0,
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg)',
-        position: 'sticky', top: 0, zIndex: 10,
-      }}>
-        <button onClick={onBack} style={{
-          background: 'none', border: 'none', color: 'var(--accent)',
-          cursor: 'pointer', fontSize: 14, fontFamily: 'inherit',
-          fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, padding: 0,
-        }}>
-          {backLabel}
-        </button>
-        <span style={{ fontWeight: 600, fontSize: 16, flex: 1, textAlign: 'center' }}>{title}</span>
-        <div style={{ width: 60 }} />{/* spacer to centre title */}
-      </div>
+// ── Wrapper: mobile = page below topbar, desktop = centred popup ──
+function EventWrapper({ onClose, children, wide }) {
+  const mobile = isMobileView()
 
-      {/* Body */}
-      <div style={{ flex: 1, padding: '20px 20px 0', maxWidth: 560, width: '100%', margin: '0 auto' }}>
+  if (mobile) {
+    // Full page starting below the topbar — topbar stays visible
+    return createPortal(
+      <div style={{
+        position: 'fixed',
+        top: TOPBAR_H,
+        left: 0, right: 0, bottom: 0,
+        zIndex: 500,
+        background: 'var(--bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}>
+        {children}
+      </div>,
+      document.body
+    )
+  }
+
+  // Desktop: dimmed backdrop + centred card
+  return createPortal(
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div style={{
+        background: 'var(--bg)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        width: wide ? 520 : 420,
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
         {children}
       </div>
-
-      {/* Footer */}
-      {footer && (
-        <div style={{
-          padding: '16px 20px', borderTop: '1px solid var(--border)',
-          background: 'var(--bg)', position: 'sticky', bottom: 0,
-          maxWidth: 560, width: '100%', margin: '0 auto',
-        }}>
-          {footer}
-        </div>
-      )}
     </div>,
     document.body
   )
 }
 
+// ── Shared sub-header for mobile page nav ────────────────────
+function MobilePageHeader({ onBack, backLabel, title, actions }) {
+  if (!isMobileView()) return null
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '0 16px', height: 48, flexShrink: 0,
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--bg-2)',
+    }}>
+      <button onClick={onBack} style={{
+        background: 'none', border: 'none', color: 'var(--accent)',
+        cursor: 'pointer', fontSize: 14, fontFamily: 'inherit',
+        fontWeight: 500, padding: 0, display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        {backLabel}
+      </button>
+      <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: 15 }}>{title}</span>
+      <div style={{ minWidth: 60, display: 'flex', justifyContent: 'flex-end' }}>{actions}</div>
+    </div>
+  )
+}
+
+// ── Desktop modal header ─────────────────────────────────────
+function DesktopHeader({ onClose, title }) {
+  if (isMobileView()) return null
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '18px 24px 0',
+    }}>
+      <span style={{ fontWeight: 600, fontSize: 16 }}>{title}</span>
+      <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 18, padding: 4 }}>✕</button>
+    </div>
+  )
+}
+
 // ── Read-only view ───────────────────────────────────────────
-function EventViewPage({ event, categories, onClose, onEdit, onDelete }) {
+function EventViewModal({ event, categories, onClose, onEdit, onDelete }) {
   const [deleting, setDeleting] = useState(false)
+  const mobile = isMobileView()
   const start = new Date(event.start_at)
   const end = new Date(event.end_at)
   const cat = categories.find(c => c.id === event.category_id) || event.event_categories
@@ -83,45 +133,55 @@ function EventViewPage({ event, categories, onClose, onEdit, onDelete }) {
   }
 
   return (
-    <PageWrapper onBack={onClose} backLabel="← Close" title="Event"
-      footer={
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <Btn variant="danger" loading={deleting} onClick={del}>Delete</Btn>
-          <Btn variant="primary" onClick={onEdit} style={{ minWidth:100 }}>Edit</Btn>
+    <EventWrapper onClose={onClose}>
+      <MobilePageHeader onBack={onClose} backLabel="← Back" title="Event"
+        actions={<button onClick={onEdit} style={{ background:'none', border:'none', color:'var(--accent)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>}
+      />
+      <DesktopHeader onClose={onClose} title="Event" />
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '16px 16px 100px' : '16px 24px 20px' }}>
+        {/* Colour header */}
+        <div style={{ background: color, borderRadius: 'var(--radius-lg)', padding: '18px 18px 16px', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 20, color: '#fff', lineHeight: 1.3 }}>{event.title}</div>
+          {cat && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 3 }}>{cat.name}</div>}
         </div>
-      }
-    >
-      {/* Colour bar + title */}
-      <div style={{ background: color, borderRadius: 'var(--radius-lg)', padding: '20px 20px 18px', marginBottom: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 22, color: '#fff', lineHeight: 1.3 }}>{event.title}</div>
-        {cat && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 4 }}>{cat.name}</div>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <DetailRow icon="ti-calendar" label="Date" value={dateLabel} />
+          <DetailRow icon="ti-clock" label="Time" value={timeLabel} />
+          {event.location && <DetailRow icon="ti-map-pin" label="Location" value={event.location} />}
+          {recurrenceLabel && <DetailRow icon="ti-refresh" label="Recurrence" value={`${recurrenceLabel}${event.recurrence_end ? ` until ${formatDate(new Date(event.recurrence_end))}` : ''}`} />}
+          {event.description && (
+            <div style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius)', padding: '12px 14px', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Notes</div>
+              <div style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{event.description}</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Details */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <DetailRow icon="ti-calendar" label="Date" value={dateLabel} />
-        <DetailRow icon="ti-clock" label="Time" value={timeLabel} />
-        {event.location && <DetailRow icon="ti-map-pin" label="Location" value={event.location} />}
-        {recurrenceLabel && <DetailRow icon="ti-refresh" label="Recurrence" value={`${recurrenceLabel}${event.recurrence_end ? ` until ${formatDate(new Date(event.recurrence_end))}` : ''}`} />}
-        {event.description && (
-          <div style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius)', padding: '14px 16px', border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Notes</div>
-            <div style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{event.description}</div>
-          </div>
-        )}
+      {/* Footer */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: mobile ? '14px 16px' : '14px 24px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg)',
+        ...(mobile ? { position: 'sticky', bottom: 0 } : {}),
+      }}>
+        <Btn variant="danger" loading={deleting} onClick={del}>Delete</Btn>
+        <Btn variant="primary" onClick={onEdit} style={{ minWidth: 90 }}>Edit</Btn>
       </div>
-      <div style={{ height: 20 }} />
-    </PageWrapper>
+    </EventWrapper>
   )
 }
 
 function DetailRow({ icon, label, value }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: 'var(--bg-2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 16, color: 'var(--text-2)' }} />
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+      <div style={{ width: 34, height: 34, borderRadius: 'var(--radius)', background: 'var(--bg-2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <i className={`ti ${icon}`} style={{ fontSize: 15, color: 'var(--text-2)' }} />
       </div>
-      <div>
+      <div style={{ paddingTop: 2 }}>
         <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
         <div style={{ fontSize: 14, color: 'var(--text)' }}>{value}</div>
       </div>
@@ -134,26 +194,27 @@ function isSameDayFn(a, b) {
 }
 
 // ── Edit / New form ──────────────────────────────────────────
-function EventEditPage({ event, categories, onClose, onSave, onDelete, onViewMode, isNew }) {
+function EventEditModal({ event, categories, onClose, onSave, onDelete, onViewMode, isNew }) {
   const isEdit = !isNew
+  const mobile = isMobileView()
 
   const defaultStart = event?.start_at ? new Date(event.start_at) : (() => { const d = new Date(); d.setMinutes(0,0,0); return d })()
   const defaultEnd   = event?.end_at   ? new Date(event.end_at)   : (() => { const d = new Date(defaultStart); d.setHours(d.getHours()+1); return d })()
 
-  const [title,        setTitle]        = useState(event?.title        || '')
-  const [desc,         setDesc]         = useState(event?.description  || '')
-  const [location,     setLocation]     = useState(event?.location     || '')
-  const [allDay,       setAllDay]       = useState(event?.all_day      || false)
-  const [startDate,    setStartDate]    = useState(toDateStr(defaultStart))
-  const [startTime,    setStartTime]    = useState(defaultStart.toTimeString().slice(0,5))
-  const [endDate,      setEndDate]      = useState(toDateStr(defaultEnd))
-  const [endTime,      setEndTime]      = useState(defaultEnd.toTimeString().slice(0,5))
-  const [categoryId,   setCategoryId]   = useState(event?.category_id  || '')
-  const [color,        setColor]        = useState(event?.color        || '')
-  const [recurrence,   setRecurrence]   = useState(event?.recurrence   || 'none')
-  const [recurrenceEnd,setRecurrenceEnd]= useState(event?.recurrence_end || '')
-  const [saving,       setSaving]       = useState(false)
-  const [deleting,     setDeleting]     = useState(false)
+  const [title,         setTitle]         = useState(event?.title         || '')
+  const [desc,          setDesc]          = useState(event?.description   || '')
+  const [location,      setLocation]      = useState(event?.location      || '')
+  const [allDay,        setAllDay]        = useState(event?.all_day       || false)
+  const [startDate,     setStartDate]     = useState(toDateStr(defaultStart))
+  const [startTime,     setStartTime]     = useState(defaultStart.toTimeString().slice(0,5))
+  const [endDate,       setEndDate]       = useState(toDateStr(defaultEnd))
+  const [endTime,       setEndTime]       = useState(defaultEnd.toTimeString().slice(0,5))
+  const [categoryId,    setCategoryId]    = useState(event?.category_id   || '')
+  const [color,         setColor]         = useState(event?.color         || '')
+  const [recurrence,    setRecurrence]    = useState(event?.recurrence    || 'none')
+  const [recurrenceEnd, setRecurrenceEnd] = useState(event?.recurrence_end || '')
+  const [saving,        setSaving]        = useState(false)
+  const [deleting,      setDeleting]      = useState(false)
 
   const save = async () => {
     if (!title.trim()) return
@@ -161,12 +222,8 @@ function EventEditPage({ event, categories, onClose, onSave, onDelete, onViewMod
     try {
       const start_at = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`
       const end_at   = allDay ? `${endDate}T23:59:59`   : `${endDate}T${endTime}:00`
-      await onSave({
-        title: title.trim(), description: desc, location,
-        all_day: allDay, start_at, end_at,
-        category_id: categoryId || null, color, recurrence,
-        recurrence_end: recurrenceEnd || null,
-      }, isEdit ? (event._originalId || event.id) : null)
+      await onSave({ title:title.trim(), description:desc, location, all_day:allDay, start_at, end_at, category_id:categoryId||null, color, recurrence, recurrence_end:recurrenceEnd||null },
+        isEdit ? (event._originalId || event.id) : null)
       onClose()
     } finally { setSaving(false) }
   }
@@ -178,30 +235,34 @@ function EventEditPage({ event, categories, onClose, onSave, onDelete, onViewMod
     finally { setDeleting(false) }
   }
 
+  const pad = mobile ? '16px 16px' : '16px 24px'
+  const gridCols = mobile ? '1fr' : '1fr 1fr'
+
   return (
-    <PageWrapper
-      onBack={onViewMode}
-      backLabel={isNew ? '← Cancel' : '← Back'}
-      title={isNew ? 'New Event' : 'Edit Event'}
-      footer={
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>{isEdit && <Btn variant="danger" loading={deleting} onClick={del}>Delete</Btn>}</div>
-          <Btn variant="primary" loading={saving} onClick={save} style={{ minWidth:100 }}>
+    <EventWrapper onClose={onViewMode}>
+      <MobilePageHeader
+        onBack={onViewMode} backLabel={isNew ? '← Cancel' : '← Back'}
+        title={isNew ? 'New Event' : 'Edit Event'}
+        actions={
+          <Btn variant="primary" loading={saving} onClick={save} style={{ padding:'6px 14px', fontSize:13 }}>
             {isNew ? 'Create' : 'Save'}
           </Btn>
-        </div>
-      }
-    >
-      <Field label="Title">
-        <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event title" />
-      </Field>
+        }
+      />
+      <DesktopHeader onClose={onViewMode} title={isNew ? 'New Event' : 'Edit Event'} />
 
-      <Field label="All day">
-        <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
+      {/* Form body */}
+      <div style={{ flex:1, overflowY:'auto', padding: mobile ? '16px 16px 100px' : pad }}>
+        <Field label="Title">
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event title" />
+        </Field>
+
+        <Field label="All day">
           <div onClick={() => setAllDay(v => !v)} style={{
-            width:44, height:26, borderRadius:13, background: allDay ? 'var(--accent)' : 'var(--bg-3)',
+            width:44, height:26, borderRadius:13,
+            background: allDay ? 'var(--accent)' : 'var(--bg-3)',
             border:'1.5px solid ' + (allDay ? 'var(--accent)' : 'var(--border-2)'),
-            position:'relative', transition:'background 0.2s, border-color 0.2s', cursor:'pointer', flexShrink:0,
+            position:'relative', transition:'background 0.2s', cursor:'pointer', flexShrink:0,
           }}>
             <div style={{
               position:'absolute', top:3, left: allDay ? 20 : 3,
@@ -209,85 +270,80 @@ function EventEditPage({ event, categories, onClose, onSave, onDelete, onViewMod
               transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)',
             }} />
           </div>
-          <span style={{ fontSize:14, color:'var(--text-2)' }}>{allDay ? 'Yes' : 'No'}</span>
-        </label>
-      </Field>
+        </Field>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-        <Field label="Start date">
-          <Input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); if(e.target.value > endDate) setEndDate(e.target.value) }} />
-        </Field>
-        {!allDay && (
-          <Field label="Start time">
-            <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+        <div style={{ display:'grid', gridTemplateColumns: gridCols, gap:12 }}>
+          <Field label="Start date">
+            <Input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); if(e.target.value > endDate) setEndDate(e.target.value) }} />
           </Field>
-        )}
-        <Field label="End date">
-          <Input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} />
-        </Field>
-        {!allDay && (
-          <Field label="End time">
-            <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+          {!allDay && <Field label="Start time"><Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></Field>}
+          <Field label="End date">
+            <Input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} />
           </Field>
+          {!allDay && <Field label="End time"><Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></Field>}
+        </div>
+
+        <Field label="Category">
+          <Select value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+            <option value="">No category</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </Field>
+
+        <Field label="Color">
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', paddingTop:4 }}>
+            <button type="button" onClick={() => setColor('')} style={{ width:32, height:32, borderRadius:'50%', cursor:'pointer', border: !color ? '2.5px solid var(--text)' : '2px solid var(--border-2)', background:'var(--bg-3)', fontSize:12, color:'var(--text-3)' }}>✕</button>
+            {COLORS.map(c => (
+              <button key={c} type="button" onClick={() => setColor(c)} style={{ width:32, height:32, borderRadius:'50%', background:c, cursor:'pointer', border:'none', outline: color===c ? `3px solid ${c}` : 'none', outlineOffset: color===c ? '2px' : '0' }} />
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Recurrence">
+          <Select value={recurrence} onChange={e => setRecurrence(e.target.value)}>
+            <option value="none">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </Select>
+        </Field>
+
+        {recurrence !== 'none' && (
+          <Field label="Repeat until"><Input type="date" value={recurrenceEnd} onChange={e => setRecurrenceEnd(e.target.value)} /></Field>
         )}
+
+        <Field label="Location">
+          <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Add location" />
+        </Field>
+
+        <Field label="Notes">
+          <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Add notes…" />
+        </Field>
       </div>
 
-      <Field label="Category">
-        <Select value={categoryId} onChange={e => setCategoryId(e.target.value)}>
-          <option value="">No category</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
-      </Field>
-
-      <Field label="Color">
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', paddingTop:4 }}>
-          <button type="button" onClick={() => setColor('')} style={{
-            width:32, height:32, borderRadius:'50%', cursor:'pointer', fontFamily:'inherit',
-            border: !color ? '2.5px solid var(--text)' : '2px solid var(--border-2)',
-            background:'var(--bg-3)', fontSize:12, color:'var(--text-3)',
-          }}>✕</button>
-          {COLORS.map(c => (
-            <button key={c} type="button" onClick={() => setColor(c)} style={{
-              width:32, height:32, borderRadius:'50%', background:c, cursor:'pointer', border:'none',
-              outline: color===c ? `3px solid ${c}` : 'none',
-              outlineOffset: color===c ? '2px' : '0',
-            }} />
-          ))}
+      {/* Desktop footer */}
+      {!mobile && (
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 24px', borderTop:'1px solid var(--border)' }}>
+          <div>{isEdit && <Btn variant="danger" loading={deleting} onClick={del}>Delete</Btn>}</div>
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn onClick={onViewMode}>Cancel</Btn>
+            <Btn variant="primary" loading={saving} onClick={save}>{isNew ? 'Create' : 'Save'}</Btn>
+          </div>
         </div>
-      </Field>
-
-      <Field label="Recurrence">
-        <Select value={recurrence} onChange={e => setRecurrence(e.target.value)}>
-          <option value="none">Does not repeat</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-        </Select>
-      </Field>
-
-      {recurrence !== 'none' && (
-        <Field label="Repeat until">
-          <Input type="date" value={recurrenceEnd} onChange={e => setRecurrenceEnd(e.target.value)} />
-        </Field>
       )}
 
-      <Field label="Location">
-        <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Add location" />
-      </Field>
-
-      <Field label="Notes">
-        <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Add notes…" />
-      </Field>
-
-      <div style={{ height:24 }} />
-    </PageWrapper>
+      {/* Mobile footer with delete */}
+      {mobile && isEdit && (
+        <div style={{ position:'sticky', bottom:0, padding:'12px 16px', borderTop:'1px solid var(--border)', background:'var(--bg)' }}>
+          <Btn variant="danger" loading={deleting} onClick={del} style={{ width:'100%', justifyContent:'center' }}>Delete event</Btn>
+        </div>
+      )}
+    </EventWrapper>
   )
 }
 
-// ── Category manager (still a modal — simpler) ───────────────
-import { Modal, BtnRow } from './ui.jsx'
-
+// ── Category manager ─────────────────────────────────────────
 export function CategoryModal({ appId, categories, onClose, onUpdate }) {
   const [cats, setCats] = useState(categories)
   const [newName, setNewName] = useState('')
