@@ -97,6 +97,8 @@ export default function App() {
         <span style={{ fontSize:14 }}>Select a page</span>
       </div>
     )
+    const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
+
     // Overview page tabs
     if (activeNavItem?.label === 'Overview') {
       if (activeTabLabel === 'Quick Access' || pageTabs.length === 0) {
@@ -112,7 +114,6 @@ export default function App() {
         return <FilesSummaryTab onNavigateToFiles={() => filesNav && navigateTo(filesNav.id)} />
       }
     }
-    const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
     if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
       return <ScheduleDashboard appId={appId} mobileOffset={mobileOffset} onSwitchTab={which => {
         const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
