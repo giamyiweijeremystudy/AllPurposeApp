@@ -115,14 +115,20 @@ export function TaskManager({ appId }) {
             className="task-add-title"
             style={{ flex:1, padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }}
           />
-          <input type="date" value={newDue} onChange={e => setNewDue(e.target.value)}
-            style={{ padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }} />
-          <select value={newPriority} onChange={e => setNewPriority(e.target.value)}
-            style={{ padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit', cursor:'pointer' }}>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+          <div style={{ position:'relative', display:'inline-flex', flexDirection:'column' }}>
+            <span style={{ fontSize:9, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:2 }}>Due date</span>
+            <input type="date" value={newDue} onChange={e => setNewDue(e.target.value)} title="Due date"
+              style={{ padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit' }} />
+          </div>
+          <div style={{ position:'relative', display:'inline-flex', flexDirection:'column' }}>
+            <span style={{ fontSize:9, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:2 }}>Priority</span>
+            <select value={newPriority} onChange={e => setNewPriority(e.target.value)}
+              style={{ padding:'7px 10px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'var(--bg)', color:'var(--text)', fontSize:13, outline:'none', fontFamily:'inherit', cursor:'pointer' }}>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
           <button onClick={addTask} style={{ padding:'7px 16px', background:'var(--accent)', border:'none', borderRadius:'var(--radius)', color:'#fff', fontSize:13, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
             Add
           </button>
