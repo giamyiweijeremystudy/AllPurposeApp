@@ -1,5 +1,5 @@
 // SVG illustrations keyed by tabler icon name — add more as you add pages
-const PAGE_ILLUSTRATIONS = {
+export const PAGE_ILLUSTRATIONS = {
   'ti-calendar': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="8" y="14" width="48" height="42" rx="6" fill="#c7d2fe"/>
@@ -94,7 +94,7 @@ const PAGE_ILLUSTRATIONS = {
 }
 
 // Accent colours keyed by icon
-const PAGE_COLORS = {
+export const PAGE_COLORS = {
   'ti-calendar': '#4f46e5',
   'ti-folder':   '#d97706',
   'ti-chart-bar':'#0891b2',
@@ -107,7 +107,7 @@ const PAGE_COLORS = {
   'default':     '#6b7280',
 }
 
-const PAGE_BG = {
+export const PAGE_BG = {
   'ti-calendar': '#eef2ff',
   'ti-folder':   '#fffbeb',
   'ti-chart-bar':'#ecfeff',
