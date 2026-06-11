@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useState } from 'react'
 import { Field, Input, Textarea, Select, Btn } from './ui.jsx'
 import { toDateStr, formatTime, formatDate } from './calendarUtils.js'
@@ -17,9 +18,9 @@ export function EventModal({ event, categories, appId, onClose, onSave, onDelete
 
 // ── Shared full-page wrapper ──────────────────────────────────
 function PageWrapper({ onBack, backLabel = '← Back', title, children, footer }) {
-  return (
+  return createPortal(
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 1100,
+      position: 'fixed', inset: 0, zIndex: 9000,
       background: 'var(--bg)',
       display: 'flex', flexDirection: 'column',
       overflowY: 'auto',
@@ -58,7 +59,8 @@ function PageWrapper({ onBack, backLabel = '← Back', title, children, footer }
           {footer}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -191,7 +193,7 @@ function EventEditPage({ event, categories, onClose, onSave, onDelete, onViewMod
       }
     >
       <Field label="Title">
-        <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event title" autoFocus />
+        <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event title" />
       </Field>
 
       <Field label="All day">
