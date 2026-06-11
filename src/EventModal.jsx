@@ -8,24 +8,22 @@ const COLORS = [
   '#16a34a','#0891b2','#0284c7','#6b7280','#1e293b',
 ]
 
-const TOPBAR_H = 50 // matches --topbar-h
-
 function isMobileView() {
   return window.innerWidth <= 768
 }
 
 // ── Router ───────────────────────────────────────────────────
-export function EventModal({ event, categories, appId, onClose, onSave, onDelete }) {
+export function EventModal({ event, categories, appId, onClose, onSave, onDelete, offsetTop }) {
   const isNew = !event?.id
   const [mode, setMode] = useState(isNew ? 'edit' : 'view')
   if (mode === 'view') {
-    return <EventViewModal event={event} categories={categories} onClose={onClose} onEdit={() => setMode('edit')} onDelete={onDelete} />
+    return <EventViewModal event={event} categories={categories} onClose={onClose} onEdit={() => setMode('edit')} onDelete={onDelete} offsetTop={offsetTop} />
   }
-  return <EventEditModal event={event} categories={categories} onClose={onClose} onSave={onSave} onDelete={onDelete} onViewMode={isNew ? onClose : () => setMode('view')} isNew={isNew} />
+  return <EventEditModal event={event} categories={categories} onClose={onClose} onSave={onSave} onDelete={onDelete} onViewMode={isNew ? onClose : () => setMode('view')} isNew={isNew} offsetTop={offsetTop} />
 }
 
 // ── Wrapper: mobile = page below topbar, desktop = centred popup ──
-function EventWrapper({ onClose, children, wide }) {
+function EventWrapper({ onClose, children, wide, offsetTop = 50 }) {
   const mobile = isMobileView()
 
   if (mobile) {
@@ -33,7 +31,7 @@ function EventWrapper({ onClose, children, wide }) {
     return createPortal(
       <div style={{
         position: 'fixed',
-        top: TOPBAR_H,
+        top: offsetTop,
         left: 0, right: 0, bottom: 0,
         zIndex: 500,
         background: 'var(--bg)',
@@ -114,7 +112,7 @@ function DesktopHeader({ onClose, title }) {
 }
 
 // ── Read-only view ───────────────────────────────────────────
-function EventViewModal({ event, categories, onClose, onEdit, onDelete }) {
+function EventViewModal({ event, categories, onClose, onEdit, onDelete, offsetTop }) {
   const [deleting, setDeleting] = useState(false)
   const mobile = isMobileView()
   const start = new Date(event.start_at)
@@ -133,7 +131,7 @@ function EventViewModal({ event, categories, onClose, onEdit, onDelete }) {
   }
 
   return (
-    <EventWrapper onClose={onClose}>
+    <EventWrapper onClose={onClose} offsetTop={offsetTop}>
       <MobilePageHeader onBack={onClose} backLabel="← Back" title="Event"
         actions={<button onClick={onEdit} style={{ background:'none', border:'none', color:'var(--accent)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Edit</button>}
       />
@@ -194,7 +192,7 @@ function isSameDayFn(a, b) {
 }
 
 // ── Edit / New form ──────────────────────────────────────────
-function EventEditModal({ event, categories, onClose, onSave, onDelete, onViewMode, isNew }) {
+function EventEditModal({ event, categories, onClose, onSave, onDelete, onViewMode, isNew, offsetTop }) {
   const isEdit = !isNew
   const mobile = isMobileView()
 
@@ -239,7 +237,7 @@ function EventEditModal({ event, categories, onClose, onSave, onDelete, onViewMo
   const gridCols = mobile ? '1fr' : '1fr 1fr'
 
   return (
-    <EventWrapper onClose={onViewMode}>
+    <EventWrapper onClose={onViewMode} offsetTop={offsetTop}>
       <MobilePageHeader
         onBack={onViewMode} backLabel={isNew ? '← Cancel' : '← Back'}
         title={isNew ? 'New Event' : 'Edit Event'}
