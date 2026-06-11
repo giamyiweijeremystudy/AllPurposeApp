@@ -5,6 +5,7 @@ import { TaskManager } from './TaskManager.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
+import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -96,9 +97,20 @@ export default function App() {
         <span style={{ fontSize:14 }}>Select a page</span>
       </div>
     )
-    // Overview page — no tabs, just the launcher grid
-    if (activeNavItem?.label === 'Overview' && pageTabs.length === 0) {
-      return <Overview navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} />
+    // Overview page tabs
+    if (activeNavItem?.label === 'Overview') {
+      if (activeTabLabel === 'Quick Access' || pageTabs.length === 0) {
+        return <QuickAccessTab navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} />
+      }
+      if (activeTabLabel === 'Schedule') {
+        const scheduleNav = navItems.find(i => i.label === 'Schedule')
+        return <ScheduleSummaryTab appId={appId} mobileOffset={mobileOffset}
+          onNavigateToSchedule={() => scheduleNav && navigateTo(scheduleNav.id)} />
+      }
+      if (activeTabLabel === 'Files') {
+        const filesNav = navItems.find(i => i.label === 'Files')
+        return <FilesSummaryTab onNavigateToFiles={() => filesNav && navigateTo(filesNav.id)} />
+      }
     }
     const activeTabLabel = pageTabs.find(t => t.id === activeTabId)?.label || ''
     if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
