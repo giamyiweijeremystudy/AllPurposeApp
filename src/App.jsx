@@ -7,6 +7,7 @@ import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
 import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
 import { AuthScreen } from './Auth.jsx'
+import { SettingsPage, UsernameSetup } from './Settings.jsx'
 import { supabase } from './supabase.js'
 import { Wordle } from './Wordle.jsx'
 
@@ -18,7 +19,10 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [calendarKey, setCalendarKey] = useState(0)
-  const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
+  const [user, setUser] = useState(undefined)
+  const [profile, setProfile] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [needsUsername, setNeedsUsername] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -36,6 +40,8 @@ export default function App() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user) loadProfile(session.user)
+      else setProfile(null)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -59,6 +65,26 @@ export default function App() {
     if (state?.app?.name) document.title = state.app.name
   }, [state?.app?.name])
 
+  const loadProfile = async (u) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', u.id).single()
+    if (data) {
+      setProfile(data)
+      // Apply saved theme/accent
+      const root = document.documentElement
+      root.classList.remove('theme-light','theme-dark')
+      if (data.theme === 'light') root.classList.add('theme-light')
+      else if (data.theme === 'dark') root.classList.add('theme-dark')
+      if (data.accent_color) {
+        root.style.setProperty('--accent', data.accent_color)
+        root.style.setProperty('--accent-bg', data.accent_color + '22')
+      }
+      // Check if username has been set (not just the auto-generated email prefix)
+      if (!data.username || data.username === u.email?.split('@')[0]) {
+        setNeedsUsername(true)
+      }
+    }
+  }
+
   const navigateTo = (id) => {
     setActiveNav(id)
     setMobileNavOpen(false)
@@ -71,6 +97,7 @@ export default function App() {
     </div>
   )
   if (user === null) return <AuthScreen />
+  if (needsUsername && user) return <UsernameSetup user={user} onComplete={name => { setProfile(p => ({...p, username:name})); setNeedsUsername(false) }} />
 
   // Show shell immediately while loading — faster perceived performance
   if (loading || !state) return (
@@ -229,9 +256,14 @@ export default function App() {
               </button>
             )
           })()}
-          {/* Sign out */}
-          <button onClick={() => supabase.auth.signOut()} className="icon-btn" title="Sign out" style={{ flexShrink:0 }}>
-            <i className="ti ti-logout" style={{ fontSize:18 }} />
+          {/* Profile/Settings button */}
+          <button onClick={() => setShowSettings(true)} title="Settings" style={{
+            display:'flex', alignItems:'center', justifyContent:'center',
+            width:32, height:32, borderRadius:'50%', flexShrink:0,
+            background: profile?.avatar_color || 'var(--accent)',
+            border:'none', cursor:'pointer', fontSize:13, fontWeight:700, color:'#fff',
+          }}>
+            {(profile?.username || user?.email || '?').slice(0,2).toUpperCase()}
           </button>
         </div>
 
@@ -254,6 +286,13 @@ export default function App() {
         </div>
       </main>
 
+      {showSettings && user && (
+        <SettingsPage
+          user={user} profile={profile}
+          onClose={() => setShowSettings(false)}
+          onProfileUpdate={p => setProfile(p)}
+        />
+      )}
       <Toast msg={toast.msg} type={toast.type} />
     </div>
   )
