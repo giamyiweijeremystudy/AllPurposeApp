@@ -53,6 +53,10 @@ export function QuickAccessTab({ navItems, sections, activeNavId, onNavigate }) 
 
 // ── Schedule summary tab ──────────────────────────────────────
 export function ScheduleSummaryTab({ appId, mobileOffset, onNavigateToSchedule }) {
+  const [userId, setUserId] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id || null))
+  }, [])
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
   const [categories, setCategories] = useState([])
@@ -67,9 +71,9 @@ export function ScheduleSummaryTab({ appId, mobileOffset, onNavigateToSchedule }
   useEffect(() => {
     if (!appId) return
     Promise.all([
-      supabase.from('events').select('*, event_categories(id,name,color)').eq('app_id', appId),
-      supabase.from('tasks').select('*').eq('app_id', appId).eq('completed', false).order('sort_order'),
-      supabase.from('event_categories').select('*').eq('app_id', appId),
+      userId ? supabase.from('events').select('*, event_categories(id,name,color)').eq('app_id', appId).eq('user_id', userId) : supabase.from('events').select('*').eq('user_id','none'),
+      userId ? supabase.from('tasks').select('*').eq('app_id', appId).eq('user_id', userId).eq('completed', false).order('sort_order') : supabase.from('tasks').select('*').eq('user_id','none').eq('completed', false).order('sort_order'),
+      userId ? supabase.from('event_categories').select('*').eq('app_id', appId).eq('user_id', userId) : supabase.from('event_categories').select('*').eq('user_id','none'),
     ]).then(([{ data: evs }, { data: tks }, { data: cats }]) => {
       setEvents(evs || [])
       setTasks(tks || [])
@@ -97,7 +101,7 @@ export function ScheduleSummaryTab({ appId, mobileOffset, onNavigateToSchedule }
 
   const saveQuickTask = async () => {
     if (!quickTask.trim()) return
-    const { data } = await supabase.from('tasks').insert({ app_id: appId, title: quickTask.trim(), sort_order: tasks.length }).select().single()
+    const { data } = await supabase.from('tasks').insert({ app_id: appId, user_id: userId, title: quickTask.trim(), sort_order: tasks.length }).select().single()
     setTasks(prev => [...prev, data])
     setQuickTask('')
     setTaskSaved(true)
@@ -114,7 +118,7 @@ export function ScheduleSummaryTab({ appId, mobileOffset, onNavigateToSchedule }
       const { data } = await supabase.from('events').update(payload).eq('id', editId).select('*, event_categories(id,name,color)').single()
       setEvents(prev => prev.map(e => e.id === editId ? data : e))
     } else {
-      const { data } = await supabase.from('events').insert({ app_id: appId, ...payload }).select('*, event_categories(id,name,color)').single()
+      const { data } = await supabase.from('events').insert({ app_id: appId, user_id: userId, ...payload }).select('*, event_categories(id,name,color)').single()
       setEvents(prev => [...prev, data])
     }
   }
