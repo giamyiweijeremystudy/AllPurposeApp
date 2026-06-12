@@ -6,6 +6,8 @@ import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
 import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
+import { AuthScreen } from './Auth.jsx'
+import { supabase } from './supabase.js'
 import { Wordle } from './Wordle.jsx'
 
 export default function App() {
@@ -16,6 +18,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [calendarKey, setCalendarKey] = useState(0)
+  const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
 
@@ -26,6 +29,19 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    // Check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (user === undefined || user === null) return // wait for auth
     loadState()
       .then(s => {
         setState(s)
@@ -47,6 +63,14 @@ export default function App() {
     setActiveNav(id)
     setMobileNavOpen(false)
   }
+
+  // Auth gate
+  if (user === undefined) return (
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-3)' }}>
+      <i className="ti ti-loader-2 spin" style={{ fontSize:28, color:'var(--text-3)' }} />
+    </div>
+  )
+  if (user === null) return <AuthScreen />
 
   // Show shell immediately while loading — faster perceived performance
   if (loading || !state) return (
@@ -195,21 +219,20 @@ export default function App() {
               ))}
             </div>
           )}
-          {/* Home button — always visible, links to Overview Quick Access */}
+          {/* Home button */}
           {(() => {
             const overviewItem = navItems.find(i => i.label === 'Overview')
             if (!overviewItem || activeNav === overviewItem.id) return null
             return (
-              <button
-                onClick={() => navigateTo(overviewItem.id)}
-                className="icon-btn"
-                title="Home"
-                style={{ flexShrink:0 }}
-              >
+              <button onClick={() => navigateTo(overviewItem.id)} className="icon-btn" title="Home" style={{ flexShrink:0 }}>
                 <i className="ti ti-home" style={{ fontSize:18 }} />
               </button>
             )
           })()}
+          {/* Sign out */}
+          <button onClick={() => supabase.auth.signOut()} className="icon-btn" title="Sign out" style={{ flexShrink:0 }}>
+            <i className="ti ti-logout" style={{ fontSize:18 }} />
+          </button>
         </div>
 
         {/* Tabs */}
