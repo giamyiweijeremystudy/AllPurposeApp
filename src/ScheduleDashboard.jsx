@@ -10,6 +10,10 @@ function todayStr() {
 }
 
 export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
+  const [userId, setUserId] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id || null))
+  }, [])
   const [events, setEvents] = useState([])
   const [tasks, setTasks] = useState([])
   const [categories, setCategories] = useState([])
@@ -24,9 +28,9 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
   useEffect(() => {
     if (!appId) return
     Promise.all([
-      supabase.from('events').select('*, event_categories(id,name,color)').eq('app_id', appId),
-      supabase.from('tasks').select('*').eq('app_id', appId).eq('completed', false).order('sort_order'),
-      supabase.from('event_categories').select('*').eq('app_id', appId),
+      userId ? supabase.from('events').select('*, event_categories(id,name,color)').eq('app_id', appId).eq('user_id', userId) : supabase.from('events').select('*, event_categories(id,name,color)').eq('app_id', appId).eq('user_id', 'none'),
+      userId ? supabase.from('tasks').select('*').eq('app_id', appId).eq('user_id', userId).eq('completed', false).order('sort_order') : supabase.from('tasks').select('*').eq('app_id', appId).eq('user_id', 'none').eq('completed', false).order('sort_order'),
+      userId ? supabase.from('event_categories').select('*').eq('app_id', appId).eq('user_id', userId) : supabase.from('event_categories').select('*').eq('app_id', appId).eq('user_id', 'none'),
     ]).then(([{ data: evs }, { data: tks }, { data: cats }]) => {
       setEvents(evs || [])
       setTasks(tks || [])
@@ -69,7 +73,7 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
       const { data } = await supabase.from('events').update(payload).eq('id', editId).select('*, event_categories(id,name,color)').single()
       setEvents(prev => prev.map(e => e.id === editId ? data : e))
     } else {
-      const { data } = await supabase.from('events').insert({ app_id: appId, ...payload }).select('*, event_categories(id,name,color)').single()
+      const { data } = await supabase.from('events').insert({ app_id: appId, user_id: userId, ...payload }).select('*, event_categories(id,name,color)').single()
       setEvents(prev => [...prev, data])
     }
   }
