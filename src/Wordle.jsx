@@ -98,17 +98,38 @@ const QWERTY = [
   ['ENTER','Z','X','C','V','B','N','M','⌫'],
 ]
 
+function getGuessStates(guess, target) {
+  const result = Array(WORD_LENGTH).fill('absent')
+  const targetLeft = target.split('')
+  // Pass 1: greens
+  for (let i = 0; i < WORD_LENGTH; i++) {
+    if (guess[i] === target[i]) {
+      result[i] = 'correct'
+      targetLeft[i] = null // consumed
+    }
+  }
+  // Pass 2: yellows — only for unmatched positions
+  for (let i = 0; i < WORD_LENGTH; i++) {
+    if (result[i] === 'correct') continue
+    const j = targetLeft.indexOf(guess[i])
+    if (j !== -1) {
+      result[i] = 'present'
+      targetLeft[j] = null // consume so duplicates don't over-yellow
+    }
+  }
+  return result
+}
+
 function getTileState(guess, target, pos) {
-  if (guess[pos] === target[pos]) return 'correct'
-  if (target.includes(guess[pos])) return 'present'
-  return 'absent'
+  return getGuessStates(guess, target)[pos]
 }
 
 function getLetterStates(guesses, target) {
   const states = {}
   for (const guess of guesses) {
+    const tileStates = getGuessStates(guess, target)
     for (let i = 0; i < guess.length; i++) {
-      const l = guess[i], s = getTileState(guess, target, i)
+      const l = guess[i], s = tileStates[i]
       if (states[l] === 'correct') continue
       if (states[l] === 'present' && s !== 'correct') continue
       states[l] = s
@@ -245,6 +266,10 @@ function GameBoard({ mode, onBack }) {
     if (current.length < WORD_LENGTH) {
       setShake(true); setTimeout(() => setShake(false), 500)
       showMsg('Not enough letters'); return
+    }
+    if (!WORDS.includes(current.toLowerCase())) {
+      setShake(true); setTimeout(() => setShake(false), 500)
+      showMsg('Not in word list'); return
     }
     const newGuesses = [...guesses, current]
     setGuesses(newGuesses); setCurrent('')
