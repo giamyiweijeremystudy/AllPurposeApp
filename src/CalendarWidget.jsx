@@ -9,6 +9,7 @@ import {
 import {
   loadCategories, loadEvents, createEvent, updateEvent, deleteEvent, createCategory, deleteCategory
 } from './calendarDb.js'
+import { supabase } from './supabase.js'
 import { EventModal, CategoryModal } from './EventModal.jsx'
 
 const WEEKDAYS_LONG  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -26,6 +27,10 @@ function useIsMobile() {
 }
 
 export function CalendarWidget({ appId, mobileOffset = 50 }) {
+  const [userId, setUserId] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id || null))
+  }, [])
   const [view, setView] = useState('month')
   const [current, setCurrent] = useState(new Date())
   const [rawEvents, setRawEvents] = useState([])
@@ -43,12 +48,12 @@ export function CalendarWidget({ appId, mobileOffset = 50 }) {
   useEffect(() => {
     if (!appId) return
     Promise.all([
-      loadCategories(appId),
+      loadCategories(appId, userId),
       loadEvents(appId,
         new Date(current.getFullYear() - 1, 0, 1).toISOString(),
         new Date(current.getFullYear() + 2, 11, 31).toISOString()
       ),
-    ]).then(([cats, evs]) => {
+    , userId]).then(([cats, evs]) => {
       setCategories(cats)
       setRawEvents(evs)
       setLoading(false)
@@ -99,7 +104,7 @@ export function CalendarWidget({ appId, mobileOffset = 50 }) {
       const updated = await updateEvent(editId, payload)
       setRawEvents(prev => prev.map(e => e.id === editId ? updated : e))
     } else {
-      const created = await createEvent(appId, payload)
+      const created = await createEvent(appId, payload, userId)
       setRawEvents(prev => [...prev, created])
     }
   }
@@ -111,7 +116,7 @@ export function CalendarWidget({ appId, mobileOffset = 50 }) {
 
   const handleCategoryUpdate = async (action, data) => {
     if (action === 'create') {
-      const cat = await createCategory(appId, data)
+      const cat = await createCategory(appId, data, userId)
       setCategories(prev => [...prev, cat])
     } else if (action === 'delete') {
       await deleteCategory(data)
