@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
 
+export { supabase }
 function pad(n) { return String(n).padStart(2,'0') }
 function todayStr() {
   const d = new Date()
@@ -8,6 +9,10 @@ function todayStr() {
 }
 
 export function TaskManager({ appId }) {
+  const [userId, setUserId] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id || null))
+  }, [])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
@@ -20,14 +25,15 @@ export function TaskManager({ appId }) {
 
   useEffect(() => {
     if (!appId) return
-    supabase.from('tasks').select('*').eq('app_id', appId).order('sort_order')
-      .then(({ data }) => { setTasks(data || []); setLoading(false) })
+    if (!userId && userId !== null) return
+    const q = userId ? supabase.from('tasks').select('*').eq('app_id', appId).eq('user_id', userId).order('sort_order') : supabase.from('tasks').select('*').eq('app_id', appId).eq('user_id','none').order('sort_order')
+    q.then(({ data }) => { setTasks(data || []); setLoading(false) })
   }, [appId])
 
   const addTask = async () => {
     if (!newTitle.trim()) return
     const { data } = await supabase.from('tasks').insert({
-      app_id: appId, title: newTitle.trim(),
+      app_id: appId, user_id: userId, title: newTitle.trim(),
       due_date: newDue || null, priority: newPriority,
       sort_order: tasks.length,
     }).select().single()
