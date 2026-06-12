@@ -53,7 +53,7 @@ export default function App() {
         showToast('Failed to load — check your Supabase config', 'error')
         setLoading(false)
       })
-  }, [])
+  }, [user])
 
   useEffect(() => {
     if (state?.app?.name) document.title = state.app.name
