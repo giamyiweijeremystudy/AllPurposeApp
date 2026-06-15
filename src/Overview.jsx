@@ -82,6 +82,22 @@ export const PAGE_ILLUSTRATIONS = {
       <ellipse cx="32" cy="20" rx="18" ry="7" fill="none" stroke="#dc2626" strokeWidth="1.5"/>
     </svg>
   ),
+  'ti-layout-grid': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="8" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="18" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="38" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="28" y="18" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="18" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="38" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
+    </svg>
+  ),
   'ti-letter-w': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="6" y="6" width="12" height="12" rx="2" fill="#538d4e"/>
@@ -120,6 +136,23 @@ export const PAGE_COLORS = {
   'ti-home':     '#0284c7',
   'ti-mail':     '#2563eb',
   'ti-database': '#dc2626',
+  'ti-layout-grid': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="8" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="18" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="38" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="28" y="18" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="18" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="38" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
+    </svg>
+  ),
+  'ti-layout-grid': '#06b6d4',
   'ti-letter-w': '#538d4e',
   'default':     '#6b7280',
 }
@@ -134,6 +167,23 @@ export const PAGE_BG = {
   'ti-home':     '#e0f2fe',
   'ti-mail':     '#dbeafe',
   'ti-database': '#fef2f2',
+  'ti-layout-grid': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="8" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="18" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
+      <rect x="28" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="38" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="28" y="18" width="10" height="10" rx="2" fill="#a855f7"/>
+      <rect x="18" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="28" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="38" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
+      <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
+    </svg>
+  ),
+  'ti-layout-grid': '#ecfeff',
   'ti-letter-w': '#f0fdf4',
   'default':     '#f9fafb',
 }
