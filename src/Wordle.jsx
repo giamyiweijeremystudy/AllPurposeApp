@@ -1,3 +1,4 @@
+import { supabase } from './supabase.js'
 import { useState, useEffect, useCallback } from 'react'
 
 const WORD_LENGTH = 5
@@ -246,6 +247,7 @@ function ModeCard({ icon, title, sub, color, onClick }) {
 // ── Game board ───────────────────────────────────────────────
 function GameBoard({ mode, onBack }) {
   const dailyWord = getTodaysWord()
+  const todayStr = new Date().toISOString().split('T')[0]
   const [target, setTarget] = useState(() => mode === 'daily' ? dailyWord : getRandomWord(''))
   const [guesses, setGuesses] = useState([])
   const [current, setCurrent] = useState('')
@@ -254,6 +256,49 @@ function GameBoard({ mode, onBack }) {
   const [message, setMessage] = useState('')
   const [done, setDone] = useState(false)
   const [won, setWon] = useState(false)
+  const [loadingState, setLoadingState] = useState(mode === 'daily')
+
+  // Load saved daily state on mount
+  useEffect(() => {
+    if (mode !== 'daily') return
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user) { setLoadingState(false); return }
+      const { data } = await supabase
+        .from('wordle_state')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .eq('date', todayStr)
+        .single()
+      if (data) {
+        setTarget(data.target)
+        setGuesses(data.guesses || [])
+        setDone(data.completed)
+        setWon(data.won)
+        if (data.completed) {
+          const msgs = ['Genius!','Magnificent!','Impressive!','Splendid!','Great!','Phew!']
+          if (data.won) setMessage(msgs[Math.min((data.guesses||[]).length-1, 5)])
+          else setMessage(data.target)
+        }
+      }
+      setLoadingState(false)
+    })
+  }, [])
+
+  // Save state after each guess (daily only)
+  const saveState = async (newGuesses, completed, wonGame, tgt) => {
+    if (mode !== 'daily') return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return
+    await supabase.from('wordle_state').upsert({
+      user_id: session.user.id,
+      date: todayStr,
+      target: tgt,
+      guesses: newGuesses,
+      completed,
+      won: wonGame,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,date' })
+  }
 
   const letterStates = getLetterStates(guesses, target)
 
@@ -276,6 +321,9 @@ function GameBoard({ mode, onBack }) {
     setReveal(newGuesses.length - 1)
     const isWin = current === target
     const isLoss = newGuesses.length >= MAX_GUESSES && !isWin
+    const completed = isWin || isLoss
+    if (completed) saveState(newGuesses, true, isWin, target)
+    else saveState(newGuesses, false, false, target)
     setTimeout(() => {
       setReveal(-1)
       if (isWin) {
@@ -306,6 +354,12 @@ function GameBoard({ mode, onBack }) {
       setGuesses([]); setCurrent(''); setDone(false); setWon(false); setMessage('')
     }
   }
+
+  if (loadingState) return (
+    <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <i className="ti ti-loader-2 spin" style={{ fontSize:24, color:'var(--text-3)' }} />
+    </div>
+  )
 
   const rows = Array.from({ length: MAX_GUESSES }, (_, ri) => {
     if (ri < guesses.length) return { word: guesses[ri], state: 'done' }
