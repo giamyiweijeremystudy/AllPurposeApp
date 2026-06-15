@@ -10,6 +10,7 @@ import { AuthScreen } from './Auth.jsx'
 import { SettingsPage, UsernameSetup } from './Settings.jsx'
 import { supabase } from './supabase.js'
 import { Wordle } from './Wordle.jsx'
+import { Tetris } from './Tetris.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -174,6 +175,7 @@ export default function App() {
     }
     if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
+    if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (pageWidgets.length === 0) return (
       <div className="empty-state">
         <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
