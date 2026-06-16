@@ -55,7 +55,8 @@ export default function App() {
     loadState()
       .then(s => {
         setState(s)
-        setActiveNav(s.navItems[0]?.id || null)
+        // Only set the initial nav on first load — never overwrite on auth re-fires
+        setActiveNav(prev => prev ?? s.navItems[0]?.id ?? null)
         setLoading(false)
       })
       .catch(e => {
