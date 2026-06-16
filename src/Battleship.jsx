@@ -492,6 +492,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                     style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none'}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
+                    <div style={{position:'absolute',top:0,left:0,fontSize:7,color:'#fbbf24',background:'rgba(0,0,0,0.8)',padding:'1px 2px',pointerEvents:'none',zIndex:99}}>{r0},{c0}</div>
                   </div>
                 )
                 })}
