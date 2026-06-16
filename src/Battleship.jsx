@@ -272,11 +272,9 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     if (!raw) { setPreview(null); return }
     const [r,c]=raw
     const r0=ds.h?r:r-ds.offR, c0=ds.h?c-ds.offC:c
-    // Clamp to grid
-    const r0c=Math.max(0,Math.min(r0, SIZE-1))
-    const c0c=Math.max(0,Math.min(c0, ds.h?SIZE-ds.len:SIZE-1))
-    const r0f=ds.h?r0c:Math.max(0,Math.min(r0,SIZE-ds.len))
-    const c0f=ds.h?c0c:r0c
+    // Clamp so ship fits on grid
+    const r0f=ds.h ? Math.max(0,Math.min(r0,SIZE-1))   : Math.max(0,Math.min(r0,SIZE-ds.len))
+    const c0f=ds.h ? Math.max(0,Math.min(c0,SIZE-ds.len)) : Math.max(0,Math.min(c0,SIZE-1))
     const cells=shipCells(r0f,c0f,ds.len,ds.h)
     const grid=buildGrid(placed.filter(s=>s.name!==ds.name))
     const valid=canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)
@@ -288,8 +286,8 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     if (!raw) return
     const [r,c]=raw
     const r0=ds.h?r:r-ds.offR, c0=ds.h?c-ds.offC:c
-    const r0f=Math.max(0,Math.min(r0,ds.h?SIZE-1:SIZE-ds.len))
-    const c0f=Math.max(0,Math.min(c0,ds.h?SIZE-ds.len:SIZE-1))
+    const r0f=ds.h ? Math.max(0,Math.min(r0,SIZE-1))      : Math.max(0,Math.min(r0,SIZE-ds.len))
+    const c0f=ds.h ? Math.max(0,Math.min(c0,SIZE-ds.len)) : Math.max(0,Math.min(c0,SIZE-1))
     const grid=buildGrid(placed.filter(s=>s.name!==ds.name))
     if (!canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)) return
     const cells=shipCells(r0f,c0f,ds.len,ds.h)
