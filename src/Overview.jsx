@@ -114,6 +114,22 @@ export const PAGE_ILLUSTRATIONS = {
       <rect x="48" y="34" width="12" height="12" rx="2" fill="var(--border-2)"/>
     </svg>
   ),
+  'ti-stack': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Base */}
+      <rect x="4" y="54" width="56" height="6" rx="3" fill="#94a3b8"/>
+      {/* Left peg + rings */}
+      <rect x="14" y="22" width="5" height="32" rx="2" fill="#94a3b8"/>
+      <rect x="5" y="48" width="22" height="7" rx="3" fill="#ef4444"/>
+      <rect x="8" y="41" width="16" height="7" rx="3" fill="#f97316"/>
+      <rect x="11" y="34" width="10" height="7" rx="3" fill="#eab308"/>
+      <rect x="13" y="27" width="6" height="7" rx="3" fill="#22c55e"/>
+      {/* Middle peg */}
+      <rect x="30" y="22" width="5" height="32" rx="2" fill="#94a3b8"/>
+      {/* Right peg */}
+      <rect x="46" y="22" width="5" height="32" rx="2" fill="#94a3b8"/>
+    </svg>
+  ),
   // fallback for unknown icons
   'default': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -152,6 +168,7 @@ export const PAGE_COLORS = {
       <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
     </svg>
   ),
+  'ti-stack': '#94a3b8',
   'ti-layout-grid': '#06b6d4',
   'ti-letter-w': '#538d4e',
   'default':     '#6b7280',
@@ -183,6 +200,7 @@ export const PAGE_BG = {
       <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
     </svg>
   ),
+  'ti-stack': '#f8fafc',
   'ti-layout-grid': '#ecfeff',
   'ti-letter-w': '#f0fdf4',
   'default':     '#f9fafb',
