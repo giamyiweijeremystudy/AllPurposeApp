@@ -30,14 +30,13 @@ function rotate(shape) {
 }
 
 function fits(board, shape, x, y) {
-  for (let r = 0; r < shape.length; r++) {
+  for (let r = 0; r < shape.length; r++)
     for (let c = 0; c < shape[r].length; c++) {
       if (!shape[r][c]) continue
       const nr = y + r, nc = x + c
       if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) return false
       if (board[nr][nc]) return false
     }
-  }
   return true
 }
 
@@ -56,9 +55,7 @@ function clearLines(board) {
   return { board: [...empty, ...kept], cleared }
 }
 
-function startX(shape) {
-  return Math.floor((COLS - shape[0].length) / 2)
-}
+function startX(shape) { return Math.floor((COLS - shape[0].length) / 2) }
 
 function ghostY(board, shape, x, y) {
   let gy = y
@@ -70,7 +67,7 @@ const SCORES = [0, 100, 300, 500, 800]
 const LEVEL_LINES = 10
 
 export function Tetris() {
-  const [screen, setScreen] = useState('menu') // menu | game | over
+  const [screen, setScreen] = useState('menu')
   const [board, setBoard] = useState(emptyBoard())
   const [piece, setPiece] = useState(null)
   const [next, setNext] = useState(null)
@@ -79,6 +76,8 @@ export function Tetris() {
   const [lines, setLines] = useState(0)
   const [level, setLevel] = useState(1)
   const [paused, setPaused] = useState(false)
+
+  // Refs for use inside intervals/callbacks
   const pausedRef = useRef(false)
   const boardRef = useRef(emptyBoard())
   const pieceRef = useRef(null)
@@ -89,23 +88,24 @@ export function Tetris() {
   const levelRef = useRef(1)
   const gameOverRef = useRef(false)
   const tickRef = useRef(null)
+  const softDropRef = useRef(null)
 
   const spawnPiece = useCallback((board, nextPiece) => {
     const p = nextPiece || randomPiece()
     const n = randomPiece()
     const x = startX(p.shape)
-    const y = 0
-    if (!fits(board, p.shape, x, y)) {
+    if (!fits(board, p.shape, x, 0)) {
       gameOverRef.current = true
+      clearInterval(tickRef.current)
       setScreen('over')
       return
     }
     pieceRef.current = p
-    posRef.current = { x, y }
+    posRef.current = { x, y: 0 }
     nextRef.current = n
-    setPiece(p)
-    setPos({ x, y })
-    setNext(n)
+    setPiece({ ...p })
+    setPos({ x, y: 0 })
+    setNext({ ...n })
   }, [])
 
   const lockPiece = useCallback(() => {
@@ -120,7 +120,7 @@ export function Tetris() {
     linesRef.current = newLines
     levelRef.current = newLevel
     scoreRef.current = newScore
-    setBoard(cleared)
+    setBoard(cleared.map(r => [...r]))
     setLines(newLines)
     setLevel(newLevel)
     setScore(newScore)
@@ -128,7 +128,7 @@ export function Tetris() {
   }, [spawnPiece])
 
   const moveDown = useCallback(() => {
-    if (pausedRef.current || gameOverRef.current) return
+    if (pausedRef.current || gameOverRef.current || !pieceRef.current) return
     const { shape } = pieceRef.current
     const { x, y } = posRef.current
     if (fits(boardRef.current, shape, x, y + 1)) {
@@ -145,178 +145,163 @@ export function Tetris() {
     tickRef.current = setInterval(moveDown, ms)
   }, [moveDown])
 
+  const doMove = useCallback((dir) => {
+    if (pausedRef.current || gameOverRef.current || !pieceRef.current) return
+    const { shape } = pieceRef.current
+    const { x, y } = posRef.current
+    const nx = x + dir
+    if (fits(boardRef.current, shape, nx, y)) {
+      posRef.current = { x: nx, y }
+      setPos({ x: nx, y })
+    }
+  }, [])
+
+  const doRotate = useCallback(() => {
+    if (pausedRef.current || gameOverRef.current || !pieceRef.current) return
+    const { shape } = pieceRef.current
+    const { x, y } = posRef.current
+    const r = rotate(shape)
+    // Wall kick: try center, then nudge left/right
+    for (const kick of [0, -1, 1, -2, 2]) {
+      if (fits(boardRef.current, r, x + kick, y)) {
+        pieceRef.current = { ...pieceRef.current, shape: r }
+        posRef.current = { x: x + kick, y }
+        setPiece(p => ({ ...p, shape: r }))
+        setPos({ x: x + kick, y })
+        return
+      }
+    }
+  }, [])
+
+  const doHardDrop = useCallback(() => {
+    if (pausedRef.current || gameOverRef.current || !pieceRef.current) return
+    const { shape } = pieceRef.current
+    const { x, y } = posRef.current
+    let gy = y
+    while (fits(boardRef.current, shape, x, gy + 1)) gy++
+    posRef.current = { x, y: gy }
+    setPos({ x, y: gy })
+    // Lock after a tiny delay so the drop is visible
+    setTimeout(() => lockPiece(), 50)
+  }, [lockPiece])
+
+  const startSoftDrop = useCallback(() => {
+    if (softDropRef.current) return
+    softDropRef.current = setInterval(() => {
+      if (!pausedRef.current && !gameOverRef.current) moveDown()
+    }, 60)
+  }, [moveDown])
+
+  const stopSoftDrop = useCallback(() => {
+    if (softDropRef.current) { clearInterval(softDropRef.current); softDropRef.current = null }
+  }, [])
+
+  const togglePause = useCallback(() => {
+    pausedRef.current = !pausedRef.current
+    setPaused(pausedRef.current)
+    if (pausedRef.current) clearInterval(tickRef.current)
+    else startTick()
+  }, [startTick])
+
   const startGame = useCallback(() => {
     gameOverRef.current = false
     pausedRef.current = false
     boardRef.current = emptyBoard()
-    scoreRef.current = 0
-    linesRef.current = 0
-    levelRef.current = 1
-    setBoard(emptyBoard())
-    setScore(0)
-    setLines(0)
-    setLevel(1)
-    setPaused(false)
-    setScreen('game')
-    const p = randomPiece()
-    const n = randomPiece()
+    scoreRef.current = 0; linesRef.current = 0; levelRef.current = 1
+    setBoard(emptyBoard()); setScore(0); setLines(0); setLevel(1)
+    setPaused(false); setScreen('game')
+    const p = randomPiece(), n = randomPiece()
     const x = startX(p.shape)
-    pieceRef.current = p
-    posRef.current = { x, y: 0 }
-    nextRef.current = n
-    setPiece(p)
-    setPos({ x, y: 0 })
-    setNext(n)
+    pieceRef.current = p; posRef.current = { x, y: 0 }; nextRef.current = n
+    setPiece({ ...p }); setPos({ x, y: 0 }); setNext({ ...n })
   }, [])
 
-  // Start tick when game starts
   useEffect(() => {
-    if (screen === 'game') startTick()
-    return () => { if (tickRef.current) clearInterval(tickRef.current) }
-  }, [screen, startTick])
+    if (screen === 'game') { startTick() }
+    return () => { clearInterval(tickRef.current); clearInterval(softDropRef.current) }
+  }, [screen])
 
-  // Restart tick when level changes (speed up)
   useEffect(() => {
     if (screen === 'game' && !paused) startTick()
   }, [level])
 
-  // Keyboard
+  // Keyboard controls
   useEffect(() => {
     if (screen !== 'game') return
-    const handle = (e) => {
-      if (gameOverRef.current) return
-      if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
-        pausedRef.current = !pausedRef.current
-        setPaused(p => !p)
-        if (!pausedRef.current) startTick()
-        else clearInterval(tickRef.current)
-        return
-      }
+    const down = (e) => {
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { togglePause(); return }
       if (pausedRef.current) return
-      const { shape } = pieceRef.current
-      const { x, y } = posRef.current
-      if (e.key === 'ArrowLeft') {
-        if (fits(boardRef.current, shape, x - 1, y)) { posRef.current = { x: x-1, y }; setPos({ x: x-1, y }) }
-      } else if (e.key === 'ArrowRight') {
-        if (fits(boardRef.current, shape, x + 1, y)) { posRef.current = { x: x+1, y }; setPos({ x: x+1, y }) }
-      } else if (e.key === 'ArrowDown') {
-        moveDown()
-      } else if (e.key === 'ArrowUp' || e.key === 'x' || e.key === 'X') {
-        const r = rotate(shape)
-        if (fits(boardRef.current, r, x, y)) { pieceRef.current = { ...pieceRef.current, shape: r }; setPiece(p => ({ ...p, shape: r })) }
-      } else if (e.key === ' ') {
-        e.preventDefault()
-        let gy = y
-        while (fits(boardRef.current, shape, x, gy + 1)) gy++
-        posRef.current = { x, y: gy }
-        setPos({ x, y: gy })
-        setTimeout(lockPiece, 0)
-      }
+      if (e.key === 'ArrowLeft') doMove(-1)
+      else if (e.key === 'ArrowRight') doMove(1)
+      else if (e.key === 'ArrowUp' || e.key === 'x') doRotate()
+      else if (e.key === 'ArrowDown') { e.preventDefault(); startSoftDrop() }
+      else if (e.key === ' ') { e.preventDefault(); doHardDrop() }
     }
-    window.addEventListener('keydown', handle)
-    return () => window.removeEventListener('keydown', handle)
-  }, [screen, moveDown, lockPiece, startTick])
+    const up = (e) => { if (e.key === 'ArrowDown') stopSoftDrop() }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
+  }, [screen, doMove, doRotate, doHardDrop, startSoftDrop, stopSoftDrop, togglePause])
 
-  // Touch controls
-  const touchStart = useRef(null)
-  const onTouchStart = (e) => { touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() } }
-  const onTouchEnd = (e) => {
-    if (!touchStart.current || pausedRef.current || gameOverRef.current) return
-    const dx = e.changedTouches[0].clientX - touchStart.current.x
-    const dy = e.changedTouches[0].clientY - touchStart.current.y
-    const dt = Date.now() - touchStart.current.time
-    const { shape } = pieceRef.current
-    const { x, y } = posRef.current
-    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 200) {
-      // Tap = rotate
-      const r = rotate(shape)
-      if (fits(boardRef.current, r, x, y)) { pieceRef.current = { ...pieceRef.current, shape: r }; setPiece(p => ({ ...p, shape: r })) }
-    } else if (Math.abs(dx) > Math.abs(dy)) {
-      // Horizontal swipe
-      const steps = Math.round(dx / 30)
-      let nx = x
-      for (let i = 0; i < Math.abs(steps); i++) {
-        const nxt = nx + Math.sign(steps)
-        if (fits(boardRef.current, shape, nxt, y)) nx = nxt
-        else break
-      }
-      if (nx !== x) { posRef.current = { x: nx, y }; setPos({ x: nx, y }) }
-    } else if (dy > 40) {
-      // Swipe down = hard drop
-      let gy = y
-      while (fits(boardRef.current, shape, x, gy + 1)) gy++
-      posRef.current = { x, y: gy }
-      setPos({ x, y: gy })
-      setTimeout(lockPiece, 0)
-    } else if (dy < -40) {
-      // Swipe up = rotate
-      const r = rotate(shape)
-      if (fits(boardRef.current, r, x, y)) { pieceRef.current = { ...pieceRef.current, shape: r }; setPiece(p => ({ ...p, shape: r })) }
-    }
-  }
+  // Block pull-to-refresh and page scroll while game is active
+  useEffect(() => {
+    if (screen !== 'game') return
+    const prevent = (e) => { e.preventDefault() }
+    document.addEventListener('touchmove', prevent, { passive: false })
+    return () => document.removeEventListener('touchmove', prevent)
+  }, [screen])
 
-  // Render board with ghost + current piece
   const displayBoard = () => {
     const b = board.map(r => [...r])
-    if (piece && screen === 'game') {
+    if (piece && screen === 'game' && !gameOverRef.current) {
       const gy = ghostY(boardRef.current, piece.shape, pos.x, pos.y)
-      // Ghost
       for (let r = 0; r < piece.shape.length; r++)
         for (let c = 0; c < piece.shape[r].length; c++)
-          if (piece.shape[r][c] && gy + r >= 0 && gy + r < ROWS)
-            if (!b[gy + r][pos.x + c]) b[gy + r][pos.x + c] = piece.color + '44'
-      // Current piece
+          if (piece.shape[r][c] && gy + r >= 0 && gy + r < ROWS && !b[gy + r][pos.x + c])
+            b[gy + r][pos.x + c] = piece.color + '44'
       for (let r = 0; r < piece.shape.length; r++)
         for (let c = 0; c < piece.shape[r].length; c++)
-          if (piece.shape[r][c] && pos.y + r >= 0) b[pos.y + r][pos.x + c] = piece.color
+          if (piece.shape[r][c] && pos.y + r >= 0)
+            b[pos.y + r][pos.x + c] = piece.color
     }
     return b
   }
 
   const CELL = 28
+  const noSelect = { userSelect:'none', WebkitUserSelect:'none', touchAction:'none' }
 
   if (screen === 'menu') return (
-    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, background:'var(--bg)', overflow:'hidden' }}>
+    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, background:'var(--bg)', ...noSelect }}>
       <div>
         <div style={{ fontWeight:800, fontSize:36, letterSpacing:'0.15em', textAlign:'center', background:'linear-gradient(135deg, #06b6d4, #a855f7, #ef4444)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>TETRIS</div>
         <div style={{ fontSize:12, color:'var(--text-3)', textAlign:'center', marginTop:4 }}>Clear lines, beat your score</div>
       </div>
-
-      {/* Preview pieces */}
-      <div style={{ display:'flex', gap:12 }}>
+      <div style={{ display:'flex', gap:10 }}>
         {Object.entries(PIECES).map(([k, p]) => (
           <div key={k} style={{ display:'flex', flexDirection:'column', gap:2 }}>
             {p.shape.map((row, ri) => (
               <div key={ri} style={{ display:'flex', gap:2 }}>
-                {row.map((c, ci) => (
-                  <div key={ci} style={{ width:10, height:10, borderRadius:2, background: c ? p.color : 'transparent' }} />
-                ))}
+                {row.map((c, ci) => <div key={ci} style={{ width:10, height:10, borderRadius:2, background: c ? p.color : 'transparent' }} />)}
               </div>
             ))}
           </div>
         ))}
       </div>
-
-      <button onClick={startGame} style={{
-        padding:'14px 48px', background:'var(--accent)', border:'none',
-        borderRadius:'var(--radius-lg)', color:'#fff', fontSize:16,
-        fontWeight:700, cursor:'pointer', fontFamily:'inherit', letterSpacing:'0.05em',
-      }}>Play</button>
-
+      <button onClick={startGame} style={{ padding:'14px 48px', background:'var(--accent)', border:'none', borderRadius:'var(--radius-lg)', color:'#fff', fontSize:16, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+        Play
+      </button>
       <div style={{ fontSize:11, color:'var(--text-3)', textAlign:'center', lineHeight:1.8 }}>
-        ← → Move &nbsp;·&nbsp; ↑ / Tap Rotate &nbsp;·&nbsp; ↓ Soft drop<br/>
-        Space Hard drop &nbsp;·&nbsp; P Pause<br/>
-        <span style={{ fontSize:10 }}>Mobile: swipe to move, tap to rotate, swipe down to drop</span>
+        ← → Move &nbsp;·&nbsp; ↑ / X Rotate &nbsp;·&nbsp; ↓ Soft drop &nbsp;·&nbsp; Space Hard drop
       </div>
     </div>
   )
 
   if (screen === 'over') return (
-    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:20, background:'var(--bg)' }}>
+    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:20, background:'var(--bg)', ...noSelect }}>
       <div style={{ fontWeight:800, fontSize:28, color:'var(--danger)' }}>GAME OVER</div>
       <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center' }}>
         <div style={{ fontSize:13, color:'var(--text-3)' }}>Score</div>
-        <div style={{ fontSize:40, fontWeight:800, color:'var(--text)' }}>{score.toLocaleString()}</div>
+        <div style={{ fontSize:40, fontWeight:800 }}>{score.toLocaleString()}</div>
         <div style={{ fontSize:13, color:'var(--text-3)' }}>Level {level} · {lines} lines</div>
       </div>
       <div style={{ display:'flex', gap:12 }}>
@@ -329,84 +314,112 @@ export function Tetris() {
   const db = displayBoard()
 
   return (
-    <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-3)', overflow:'hidden', userSelect:'none' }}
-      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div style={{ position:'absolute', inset:0, background:'var(--bg-3)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', overflow:'hidden', ...noSelect }}>
 
-      {/* Board */}
-      <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-        <div style={{ border:'2px solid var(--border-2)', borderRadius:6, overflow:'hidden', background:'var(--bg)' }}>
+      <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'10px 10px 0' }}>
+        {/* Board */}
+        <div style={{ position:'relative', border:'2px solid var(--border-2)', borderRadius:4, overflow:'hidden', background:'var(--bg)', flexShrink:0 }}>
           {db.map((row, ri) => (
             <div key={ri} style={{ display:'flex' }}>
               {row.map((cell, ci) => (
                 <div key={ci} style={{
-                  width:CELL, height:CELL,
-                  background: cell || 'transparent',
-                  borderRight:'1px solid var(--border)',
-                  borderBottom:'1px solid var(--border)',
-                  borderRadius: cell && !cell.includes('44') ? 3 : 0,
-                  transition: cell ? 'none' : 'background 0.05s',
+                  width: CELL, height: CELL,
+                  background: cell ? (cell.endsWith('44') ? cell : cell) : 'transparent',
+                  borderRight: '1px solid ' + (cell ? 'rgba(0,0,0,0.2)' : 'var(--border)'),
+                  borderBottom: '1px solid ' + (cell ? 'rgba(0,0,0,0.2)' : 'var(--border)'),
+                  borderRadius: cell && !cell.endsWith('44') ? 3 : 0,
                 }} />
               ))}
             </div>
           ))}
+          {paused && (
+            <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <span style={{ color:'#fff', fontWeight:800, fontSize:22, letterSpacing:'0.1em' }}>PAUSED</span>
+            </div>
+          )}
         </div>
 
         {/* Side panel */}
-        <div style={{ display:'flex', flexDirection:'column', gap:16, minWidth:80 }}>
-          {/* Score */}
-          {[
-            { label:'SCORE', value: score.toLocaleString() },
-            { label:'LEVEL', value: level },
-            { label:'LINES', value: lines },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px' }}>
-              <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', letterSpacing:'0.1em', marginBottom:4 }}>{label}</div>
-              <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{value}</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10, minWidth:72 }}>
+          {[{ label:'SCORE', value: score.toLocaleString() }, { label:'LEVEL', value: level }, { label:'LINES', value: lines }].map(({ label, value }) => (
+            <div key={label} style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'8px 10px' }}>
+              <div style={{ fontSize:8, fontWeight:700, color:'var(--text-3)', letterSpacing:'0.1em', marginBottom:3 }}>{label}</div>
+              <div style={{ fontSize:16, fontWeight:800 }}>{value}</div>
             </div>
           ))}
-
           {/* Next piece */}
-          <div style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px' }}>
-            <div style={{ fontSize:9, fontWeight:700, color:'var(--text-3)', letterSpacing:'0.1em', marginBottom:8 }}>NEXT</div>
-            {next && (
-              <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                {next.shape.map((row, ri) => (
-                  <div key={ri} style={{ display:'flex', gap:3 }}>
-                    {row.map((c, ci) => (
-                      <div key={ci} style={{ width:14, height:14, borderRadius:2, background: c ? next.color : 'var(--bg-3)' }} />
-                    ))}
-                  </div>
-                ))}
+          <div style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'8px 10px' }}>
+            <div style={{ fontSize:8, fontWeight:700, color:'var(--text-3)', letterSpacing:'0.1em', marginBottom:6 }}>NEXT</div>
+            {next && next.shape.map((row, ri) => (
+              <div key={ri} style={{ display:'flex', gap:2, marginBottom:2 }}>
+                {row.map((c, ci) => <div key={ci} style={{ width:12, height:12, borderRadius:2, background: c ? next.color : 'var(--bg-3)' }} />)}
               </div>
-            )}
+            ))}
           </div>
-
-          {/* Buttons */}
-          <button onClick={() => {
-            pausedRef.current = !pausedRef.current
-            setPaused(p => !p)
-            if (!pausedRef.current) startTick()
-            else clearInterval(tickRef.current)
-          }} style={{ padding:'8px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'transparent', color:'var(--text-2)', cursor:'pointer', fontSize:11, fontFamily:'inherit' }}>
+          <button onClick={togglePause} style={{ padding:'6px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'transparent', color:'var(--text-2)', cursor:'pointer', fontSize:10, fontFamily:'inherit' }}>
             {paused ? '▶ Resume' : '⏸ Pause'}
           </button>
-          <button onClick={() => { clearInterval(tickRef.current); setScreen('menu') }}
-            style={{ padding:'8px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'transparent', color:'var(--text-2)', cursor:'pointer', fontSize:11, fontFamily:'inherit' }}>
+          <button onClick={() => { clearInterval(tickRef.current); setScreen('menu') }} style={{ padding:'6px', border:'1px solid var(--border-2)', borderRadius:'var(--radius)', background:'transparent', color:'var(--text-2)', cursor:'pointer', fontSize:10, fontFamily:'inherit' }}>
             ✕ Quit
           </button>
         </div>
       </div>
 
-      {/* Pause overlay */}
-      {paused && (
-        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
-          <div style={{ fontWeight:800, fontSize:28, color:'#fff', letterSpacing:'0.1em' }}>PAUSED</div>
-          <button onClick={() => { pausedRef.current = false; setPaused(false); startTick() }}
-            style={{ padding:'12px 32px', background:'var(--accent)', border:'none', borderRadius:'var(--radius)', color:'#fff', fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
-            Resume
-          </button>
+      {/* Mobile on-screen controls */}
+      <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center', padding:'12px 0', width:'100%', maxWidth:320 }}>
+        {/* Rotate row */}
+        <CtrlBtn label="↻ Rotate" onPress={doRotate} wide />
+        {/* Move + drop row */}
+        <div style={{ display:'flex', gap:8, width:'100%' }}>
+          <CtrlBtn label="◀" onPress={() => doMove(-1)} onHold={() => doMove(-1)} flex />
+          <CtrlBtn label="▼" onPressStart={startSoftDrop} onPressEnd={stopSoftDrop} flex />
+          <CtrlBtn label="▶" onPress={() => doMove(1)} onHold={() => doMove(1)} flex />
         </div>
-      )}
+        {/* Hard drop */}
+        <CtrlBtn label="⬇ Drop" onPress={doHardDrop} wide accent />
+      </div>
     </div>
+  )
+}
+
+// ── Control button with hold support ─────────────────────────
+function CtrlBtn({ label, onPress, onHold, onPressStart, onPressEnd, wide, flex, accent }) {
+  const holdRef = useRef(null)
+  const noSelect = { userSelect:'none', WebkitUserSelect:'none', touchAction:'none' }
+
+  const handleStart = (e) => {
+    e.preventDefault()
+    if (onPressStart) { onPressStart(); return }
+    if (onPress) onPress()
+    if (onHold) {
+      holdRef.current = setInterval(() => onHold(), 80)
+    }
+  }
+  const handleEnd = (e) => {
+    e.preventDefault()
+    if (onPressEnd) onPressEnd()
+    if (holdRef.current) { clearInterval(holdRef.current); holdRef.current = null }
+  }
+
+  return (
+    <button
+      onPointerDown={handleStart}
+      onPointerUp={handleEnd}
+      onPointerLeave={handleEnd}
+      onContextMenu={e => e.preventDefault()}
+      style={{
+        flex: flex ? 1 : undefined,
+        width: wide ? '100%' : undefined,
+        padding:'14px 8px',
+        background: accent ? 'var(--accent)' : 'var(--bg)',
+        border:'1.5px solid var(--border-2)',
+        borderRadius:'var(--radius)',
+        color: accent ? '#fff' : 'var(--text)',
+        fontSize:15, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+        ...noSelect,
+      }}
+    >
+      {label}
+    </button>
   )
 }
