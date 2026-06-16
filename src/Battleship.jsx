@@ -438,7 +438,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const sx=e.clientX,sy=e.clientY
                       const rect=gridRef.current.getBoundingClientRect()
                       const offR=Math.max(0,Math.floor((sy-rect.top)/cs)-r0)
-                      const offC=Math.max(0,Math.floor((sx-rect.left)/cs)-c0)
+                      const offC=Math.max(0,Math.floor((sx-rect.left-cs)/cs)-c0)
                       let moved=false
                       const onM=(mv)=>{
                         if(!moved&&Math.hypot(mv.clientX-sx,mv.clientY-sy)>8){
@@ -463,7 +463,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const t=e.touches[0],sx=t.clientX,sy=t.clientY
                       const rect=gridRef.current.getBoundingClientRect()
                       const offR=Math.max(0,Math.floor((sy-rect.top)/cs)-r0)
-                      const offC=Math.max(0,Math.floor((sx-rect.left)/cs)-c0)
+                      const offC=Math.max(0,Math.floor((sx-rect.left-cs)/cs)-c0)
                       let moved=false
                       const onM=(mv)=>{
                         mv.preventDefault()
