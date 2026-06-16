@@ -266,11 +266,13 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
 
   const placedSet = new Set(placed.map(s=>s.name))
   const allPlaced = placed.length === SHIPS.length
+  const [dbg, setDbg] = useState(null) // debug: {px,py,cell}
 
   const getGridCell = (cx, cy) => {
     const el=gridRef.current; if(!el) return null
     const rect=el.getBoundingClientRect()
     const c=Math.floor((cx-rect.left)/cs), r=Math.floor((cy-rect.top)/cs)
+    setDbg({px:Math.round(cx-rect.left), py:Math.round(cy-rect.top), c, r, rl:Math.round(rect.left), cs})
     if(r<0||r>=SIZE||c<0||c>=SIZE) return null
     return [r,c]
   }
@@ -414,6 +416,9 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
             )
           })}
           <div style={{fontSize:9,color:'var(--text-3)',marginTop:4}}>Click ship on board to rotate</div>
+          {dbg&&<div style={{fontSize:9,color:'#fbbf24',marginTop:4,fontFamily:'monospace',background:'#111',padding:4,borderRadius:3}}>
+            px:{dbg.px} py:{dbg.py} → col:{dbg.c} row:{dbg.r} | rect.left:{dbg.rl} cs:{dbg.cs}
+          </div>}
         </div>
 
         {/* Placement grid */}
