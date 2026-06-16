@@ -294,7 +294,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     if (!canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)) return
     const cells=shipCells(r0f,c0f,ds.len,ds.h)
     setPlaced(prev=>[...prev.filter(s=>s.name!==ds.name),{name:ds.name,len:ds.len,cells,horiz:ds.h,sunk:false}])
-    setHoriz(p=>({...p,[ds.name]:ds.h}))
+    // horiz state stays true (horizontal) for bank display regardless of grid orientation
   }
 
   const rotateOnBoard = (name) => {
@@ -309,7 +309,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     if (!canPlace(grid,name,nr,nc,ship.len,newH)) return
     const cells=shipCells(nr,nc,ship.len,newH)
     setPlaced(prev=>[...prev.filter(s=>s.name!==name),{...ship,cells,horiz:newH}])
-    setHoriz(p=>({...p,[name]:newH}))
+    // Do NOT update horiz — bank always stays horizontal
   }
 
   // Global pointer listeners for drag
@@ -353,7 +353,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const randomize = () => {
     const p=randomPlacement()
     setPlaced(p)
-    setHoriz(Object.fromEntries(p.map(s=>[s.name,s.horiz])))
+    // horiz stays all-true so bank shows horizontal
   }
   const reset = () => { setPlaced([]); setHoriz(Object.fromEntries(SHIPS.map(s=>[s.name,true]))) }
 
