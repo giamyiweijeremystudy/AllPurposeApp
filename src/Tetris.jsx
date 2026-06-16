@@ -212,12 +212,23 @@ export function Tetris() {
       else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'x' || e.key === 'X') doRotate()
       else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
         e.preventDefault()
-        if (!softDropRef.current)
+        if (!softDropRef.current) {
+          // Immediate soft drop + start interval; after 400ms switches to hard drop
+          moveDown()
           softDropRef.current = setInterval(() => { if (!pausedRef.current) moveDown() }, 60)
+          softDropRef.hardDropTimer = setTimeout(() => {
+            clearInterval(softDropRef.current)
+            softDropRef.current = null
+            if (!pausedRef.current && !gameOverRef.current) doHardDrop()
+          }, 400)
+        }
       } else if (e.key === ' ') { e.preventDefault(); doHardDrop() }
     }
     const up = (e) => {
-      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { clearInterval(softDropRef.current); softDropRef.current = null }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        clearInterval(softDropRef.current); softDropRef.current = null
+        clearTimeout(softDropRef.hardDropTimer); softDropRef.hardDropTimer = null
+      }
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -230,16 +241,16 @@ export function Tetris() {
     const el = boardElRef.current
     if (!el) return
 
-    let t0 = null          // start position
-    let lastCellX = 0      // last column the piece was moved to
-    let direction = null   // 'h' horizontal | 'v' vertical | null undecided
-    const CELL_PX = 28     // must match CELL constant
+    let t0 = null          // current reference (resets during soft drop)
+    let t0orig = null      // original touch start (never reset — for hard drop threshold)
+    let direction = null   // 'h' | 'v' | null
+    const CELL_PX = 28
 
     const onStart = (e) => {
       if (pausedRef.current || gameOverRef.current) return
       const touch = e.touches[0]
       t0 = { x: touch.clientX, y: touch.clientY, time: Date.now() }
-      lastCellX = posRef.current.x
+      t0orig = { x: touch.clientX, y: touch.clientY, time: Date.now() }
       direction = null
     }
 
@@ -260,52 +271,48 @@ export function Tetris() {
       }
 
       if (direction === 'h') {
-        // Move piece to follow finger in real time
+        // Move piece to follow finger live — based on offset from original start
         const cellsMoved = Math.round(dx / CELL_PX)
-        const startCellX = posRef.current.x - (lastCellX - Math.round(dx / CELL_PX))
-        const targetX = startX(pieceRef.current.shape) + cellsMoved
+        const startPieceX = startX(pieceRef.current.shape)
+        const targetX = startPieceX + cellsMoved
         const clampedX = Math.max(0, Math.min(COLS - pieceRef.current.shape[0].length, targetX))
         if (clampedX !== posRef.current.x && fits(boardRef.current, pieceRef.current.shape, clampedX, posRef.current.y)) {
           posRef.current = { ...posRef.current, x: clampedX }
           setPos({ ...posRef.current })
         }
       } else if (direction === 'v' && dy > 0) {
-        // Soft drop while swiping down
-        const cellsDown = Math.floor(dy / CELL_PX)
-        const startY = posRef.current.y
-        // move piece down incrementally
-        const baseY = Math.round(t0.y / CELL_PX) // rough reference
-        if (cellsDown > 0) {
-          let ny = posRef.current.y
-          const targetY = ny + 1
+        // Soft drop — move one row per CELL_PX of downward movement
+        // Reset t0.y each row so next row needs another CELL_PX of drag
+        if (dy >= CELL_PX) {
+          const targetY = posRef.current.y + 1
           if (fits(boardRef.current, pieceRef.current.shape, posRef.current.x, targetY)) {
             posRef.current = { ...posRef.current, y: targetY }
             setPos({ ...posRef.current })
-            t0 = { ...t0, y: touch.clientY } // reset so each cell needs a full swipe
           }
+          t0 = { ...t0, y: touch.clientY } // reset reference so next row needs another cell
         }
       }
     }
 
     const onEnd = (e) => {
-      if (!t0) return
+      if (!t0orig) return
       const touch = e.changedTouches[0]
-      const dx = touch.clientX - t0.x
-      const dy = touch.clientY - t0.y
-      const dt = Date.now() - t0.time
-      const absDx = Math.abs(dx), absDy = Math.abs(dy)
+      const totalDx = touch.clientX - t0orig.x
+      const totalDy = touch.clientY - t0orig.y
+      const dt = Date.now() - t0orig.time
+      const absDx = Math.abs(totalDx), absDy = Math.abs(totalDy)
 
       if (!pausedRef.current && !gameOverRef.current) {
         if (direction === null && absDx < 10 && absDy < 10 && dt < 300) {
           // Tap = rotate
           doRotate()
-        } else if (direction === 'v' && dy > 80) {
-          // Fast hard swipe down = hard drop
+        } else if (direction === 'v' && totalDy > 60) {
+          // Swipe down = hard drop (60px total from where finger started)
           doHardDrop()
         }
       }
 
-      t0 = null; direction = null
+      t0 = null; t0orig = null; direction = null
     }
 
     el.addEventListener('touchstart', onStart, { passive: true })
