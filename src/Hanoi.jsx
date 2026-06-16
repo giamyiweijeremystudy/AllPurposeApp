@@ -123,7 +123,6 @@ export function Hanoi() {
   const PEG_H    = numRings * (RING_H + RING_GAP) + 8  // pole height
 
   const ringW = (size) => MIN_RW + ((size - 1) / Math.max(numRings - 1, 1)) * (MAX_RW - MIN_RW)
-  const ringBottom = (stackIdx) => BASE_H + stackIdx * (RING_H + RING_GAP)  // px from base of peg area
 
   // Total board height = LIFT_H (for floating ring) + PEG_H + BASE_H
   const BOARD_H = LIFT_H + PEG_H + BASE_H
@@ -203,13 +202,15 @@ export function Hanoi() {
 
               {/* Rings on this peg — stacked from base upward */}
               {peg.map((size, ri) => {
-                const bottom = LIFT_H + PEG_H + BASE_H - ringBottom(ri+1) - RING_H
+                // ri=0 is bottom ring, sits just above base
+                // top of ring ri = LIFT_H + PEG_H - (ri+1)*(RING_H+RING_GAP)
+                const ringTop = LIFT_H + PEG_H - (ri + 1) * (RING_H + RING_GAP)
                 const isTopRing = ri === peg.length - 1
                 return (
                   <div key={ri} style={{
                     position:'absolute',
                     left: pegCenterX - ringW(size)/2,
-                    top: bottom,
+                    top: ringTop,
                     width: ringW(size),
                     height: RING_H,
                     borderRadius: 8,
