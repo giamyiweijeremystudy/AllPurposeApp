@@ -168,14 +168,14 @@ function Explosion({x,y,cs}) {
   )
 }
 
-function SinkAnim({ship,cs}) {
+function SinkAnim({ship,cs,offsetX=0}) {
   const [f,setF]=useState(0)
   useEffect(()=>{const t=setInterval(()=>setF(v=>v+1),100);return()=>clearInterval(t)},[])
   if(f>20) return null
   const prog=f/20,op=Math.max(0,1-prog*1.2)
   const [r0,c0]=ship.cells[0]
   return (
-    <div style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:10,opacity:op,transform:`translateY(${prog*cs*0.7}px) rotate(${prog*(ship.horiz?12:-8)}deg)`,transformOrigin:'center'}}>
+    <div style={{position:'absolute',top:r0*cs,left:(c0+1)*cs+offsetX,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:10,opacity:op,transform:`translateY(${prog*cs*0.7}px) rotate(${prog*(ship.horiz?12:-8)}deg)`,transformOrigin:'center'}}>
       <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/>
     </div>
   )
@@ -228,17 +228,17 @@ function BattleGrid({ships,shots,onShot,showShips,cs,disabled,firingShip,impact,
           if(rendered.has(ship.name)) return null; rendered.add(ship.name)
           if(sinkShip?.name===ship.name) return null
           const [r0,c0]=ship.cells[0],hasHit=ship.cells.some(([r,c])=>shotSet.has(`${r},${c}`))
-          return <div key={ship.name} style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:5,opacity:ship.sunk?0:1,transition:'opacity 0.3s',filter:firingShip?.name===ship.name?'brightness(1.3)':'none'}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={ship.sunk} hit={hasHit&&!ship.sunk} firing={firingShip?.name===ship.name}/></div>
+          return <div key={ship.name} style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:5,opacity:ship.sunk?0:1,transition:'opacity 0.3s',filter:firingShip?.name===ship.name?'brightness(1.3)':'none'}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={ship.sunk} hit={hasHit&&!ship.sunk} firing={firingShip?.name===ship.name}/></div>
         })}
         {/* Sunk enemy ships revealed */}
         {sunkEnemy&&sunkEnemy.filter(s=>s.sunk).map(ship=>{
           const [r0,c0]=ship.cells[0]
-          return <div key={`se-${ship.name}`} style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:4,opacity:0.65}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/></div>
+          return <div key={`se-${ship.name}`} style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:4,opacity:0.65}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/></div>
         })}
         {sinkShip&&<SinkAnim ship={sinkShip} cs={cs}/>}
         {shell&&<ShellArc srcX={shell.sx} srcY={shell.sy} dstX={shell.dx} dstY={shell.dy} onLand={onLand}/>}
-        {impact?.type==='explosion'&&<Explosion x={(impact.cell[1]+0.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
-        {impact?.type==='splash'&&<Splash x={(impact.cell[1]+0.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
+        {impact?.type==='explosion'&&<Explosion x={(impact.cell[1]+1.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
+        {impact?.type==='splash'&&<Splash x={(impact.cell[1]+1.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
       </div>
     </div>
   )
@@ -484,7 +484,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       window.addEventListener('touchmove',onM,{passive:false})
                       window.addEventListener('touchend',onU)
                     }}
-                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5}}
+                    style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
                   </div>
