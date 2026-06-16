@@ -13,6 +13,7 @@ import { Wordle } from './Wordle.jsx'
 import { Tetris } from './Tetris.jsx'
 import { Hanoi } from './Hanoi.jsx'
 import { Snake } from './Snake.jsx'
+import { Battleship } from './Battleship.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -180,6 +181,7 @@ export default function App() {
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />
     if (activeNavItem?.label === 'Snake') return <Snake />
+    if (activeNavItem?.label === 'Battleship') return <Battleship />
     if (pageWidgets.length === 0) return (
       <div className="empty-state">
         <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
