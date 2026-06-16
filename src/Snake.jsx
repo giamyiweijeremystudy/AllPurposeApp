@@ -63,7 +63,7 @@ export function Snake() {
     setScore(g.score)
   }, [])
 
-  const speed = (s) => s >= 200 ? 80 : s >= 100 ? 110 : s >= 50 ? 140 : 170
+  const speed = (s) => s >= 200 ? 100 : s >= 100 ? 130 : s >= 50 ? 160 : 200
 
   const tick = useCallback(() => {
     if (pausedRef.current) return
