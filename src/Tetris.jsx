@@ -132,7 +132,10 @@ export function Tetris() {
 
   const startTick = useCallback(() => {
     if (tickRef.current) clearInterval(tickRef.current)
-    const ms = Math.max(80, TICK_MS - (levelRef.current - 1) * 40)
+    const lvl = levelRef.current
+    // Only speed up at milestones: 25, 50, 75, 100
+    const speedSteps = [0, 25, 50, 75, 100].filter(n => lvl >= n).length - 1
+    const ms = Math.max(120, TICK_MS - speedSteps * 80)
     tickRef.current = setInterval(moveDown, ms)
   }, [moveDown])
 
@@ -197,8 +200,15 @@ export function Tetris() {
     return () => { clearInterval(tickRef.current); clearInterval(softDropRef.current) }
   }, [screen])
 
+  // Update tick speed when level hits a milestone (without resetting game state)
+  const prevLevelRef = useRef(1)
   useEffect(() => {
-    if (screen === 'game' && !paused) startTick()
+    if (screen !== 'game' || paused) return
+    const milestones = [25, 50, 75, 100]
+    const prevMilestones = milestones.filter(m => prevLevelRef.current >= m).length
+    const currMilestones = milestones.filter(m => level >= m).length
+    if (currMilestones > prevMilestones) startTick() // only restart tick on milestone
+    prevLevelRef.current = level
   }, [level])
 
   // Keyboard
