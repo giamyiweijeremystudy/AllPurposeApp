@@ -262,7 +262,8 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const getGridCell = (cx, cy) => {
     const el=gridRef.current; if(!el) return null
     const rect=el.getBoundingClientRect()
-    const c=Math.floor((cx-rect.left)/cs), r=Math.floor((cy-rect.top)/cs)
+    // subtract cs to skip the row-number label column on the left
+    const c=Math.floor((cx-rect.left-cs)/cs), r=Math.floor((cy-rect.top)/cs)
     if(r<0||r>=SIZE||c<0||c>=SIZE) return null
     return [r,c]
   }
@@ -435,8 +436,10 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       // Only start drag after threshold to allow click-to-rotate
                       const sx=e.clientX,sy=e.clientY
                       const rect=gridRef.current.getBoundingClientRect()
-                      const offR=Math.max(0,Math.floor((sy-rect.top)/cs)-r0)
-                      const offC=Math.max(0,Math.floor((sx-rect.left-cs)/cs)-c0)
+                      const rawR=Math.floor((sy-rect.top)/cs)
+                      const rawC=Math.floor((sx-rect.left-cs)/cs)
+                      const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
+                      const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
                       let moved=false
                       const onM=(mv)=>{
                         if(!moved&&Math.hypot(mv.clientX-sx,mv.clientY-sy)>8){
@@ -460,8 +463,10 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       e.preventDefault()
                       const t=e.touches[0],sx=t.clientX,sy=t.clientY
                       const rect=gridRef.current.getBoundingClientRect()
-                      const offR=Math.max(0,Math.floor((sy-rect.top)/cs)-r0)
-                      const offC=Math.max(0,Math.floor((sx-rect.left-cs)/cs)-c0)
+                      const rawR=Math.floor((sy-rect.top)/cs)
+                      const rawC=Math.floor((sx-rect.left-cs)/cs)
+                      const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
+                      const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
                       let moved=false
                       const onM=(mv)=>{
                         mv.preventDefault()
