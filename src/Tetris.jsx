@@ -85,17 +85,20 @@ export function Tetris() {
     const p = nextPiece || randomPiece()
     const n = randomPiece()
     const x = startX(p.shape)
-    if (!fits(board, p.shape, x, 0)) {
+    // Try spawn at y=0, if blocked try y=-1 (piece entering from top)
+    // Game over only if can't fit at either
+    const spawnY = fits(board, p.shape, x, 0) ? 0 : fits(board, p.shape, x, -1) ? -1 : null
+    if (spawnY === null) {
       gameOverRef.current = true
       clearInterval(tickRef.current)
       setScreen('over')
       return
     }
     pieceRef.current = p
-    posRef.current = { x, y: 0 }
+    posRef.current = { x, y: spawnY }
     nextRef.current = n
     setPiece({ ...p })
-    setPos({ x, y: 0 })
+    setPos({ x, y: spawnY })
     setNext({ ...n })
   }, [])
 
@@ -204,74 +207,105 @@ export function Tetris() {
     const down = (e) => {
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { togglePause(); return }
       if (pausedRef.current) return
-      if (e.key === 'ArrowLeft') doMove(-1)
-      else if (e.key === 'ArrowRight') doMove(1)
-      else if (e.key === 'ArrowUp' || e.key === 'x') doRotate()
-      else if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') doMove(-1)
+      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') doMove(1)
+      else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'x' || e.key === 'X') doRotate()
+      else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
         e.preventDefault()
         if (!softDropRef.current)
           softDropRef.current = setInterval(() => { if (!pausedRef.current) moveDown() }, 60)
       } else if (e.key === ' ') { e.preventDefault(); doHardDrop() }
     }
     const up = (e) => {
-      if (e.key === 'ArrowDown') { clearInterval(softDropRef.current); softDropRef.current = null }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { clearInterval(softDropRef.current); softDropRef.current = null }
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
   }, [screen, doMove, doRotate, doHardDrop, moveDown, togglePause])
 
-  // Touch controls — attached directly to board element to avoid global interference
+  // Touch controls — live tracking so piece follows finger
   useEffect(() => {
     if (screen !== 'game') return
     const el = boardElRef.current
     if (!el) return
 
-    let t0 = null
-    let moved = false
+    let t0 = null          // start position
+    let lastCellX = 0      // last column the piece was moved to
+    let direction = null   // 'h' horizontal | 'v' vertical | null undecided
+    const CELL_PX = 28     // must match CELL constant
 
     const onStart = (e) => {
-      t0 = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() }
-      moved = false
+      if (pausedRef.current || gameOverRef.current) return
+      const touch = e.touches[0]
+      t0 = { x: touch.clientX, y: touch.clientY, time: Date.now() }
+      lastCellX = posRef.current.x
+      direction = null
     }
 
     const onMove = (e) => {
-      if (!t0) return
-      const dx = e.touches[0].clientX - t0.x
-      const dy = e.touches[0].clientY - t0.y
-      // Only prevent default for horizontal swipes or downward swipes (not upward scroll)
-      if (Math.abs(dx) > 8 || dy > 8) {
-        e.preventDefault()
-        moved = true
+      if (!t0 || pausedRef.current || gameOverRef.current) return
+      const touch = e.touches[0]
+      const dx = touch.clientX - t0.x
+      const dy = touch.clientY - t0.y
+      const absDx = Math.abs(dx), absDy = Math.abs(dy)
+
+      // Determine direction once threshold passed
+      if (direction === null) {
+        if (absDx > 8 || absDy > 8) direction = absDx >= absDy ? 'h' : 'v'
+      }
+
+      if (direction === 'h' || direction === 'v') {
+        e.preventDefault() // stop scroll / pull-to-refresh
+      }
+
+      if (direction === 'h') {
+        // Move piece to follow finger in real time
+        const cellsMoved = Math.round(dx / CELL_PX)
+        const startCellX = posRef.current.x - (lastCellX - Math.round(dx / CELL_PX))
+        const targetX = startX(pieceRef.current.shape) + cellsMoved
+        const clampedX = Math.max(0, Math.min(COLS - pieceRef.current.shape[0].length, targetX))
+        if (clampedX !== posRef.current.x && fits(boardRef.current, pieceRef.current.shape, clampedX, posRef.current.y)) {
+          posRef.current = { ...posRef.current, x: clampedX }
+          setPos({ ...posRef.current })
+        }
+      } else if (direction === 'v' && dy > 0) {
+        // Soft drop while swiping down
+        const cellsDown = Math.floor(dy / CELL_PX)
+        const startY = posRef.current.y
+        // move piece down incrementally
+        const baseY = Math.round(t0.y / CELL_PX) // rough reference
+        if (cellsDown > 0) {
+          let ny = posRef.current.y
+          const targetY = ny + 1
+          if (fits(boardRef.current, pieceRef.current.shape, posRef.current.x, targetY)) {
+            posRef.current = { ...posRef.current, y: targetY }
+            setPos({ ...posRef.current })
+            t0 = { ...t0, y: touch.clientY } // reset so each cell needs a full swipe
+          }
+        }
       }
     }
 
     const onEnd = (e) => {
       if (!t0) return
-      const dx = e.changedTouches[0].clientX - t0.x
-      const dy = e.changedTouches[0].clientY - t0.y
+      const touch = e.changedTouches[0]
+      const dx = touch.clientX - t0.x
+      const dy = touch.clientY - t0.y
       const dt = Date.now() - t0.time
       const absDx = Math.abs(dx), absDy = Math.abs(dy)
 
-      if (pausedRef.current || gameOverRef.current) { t0 = null; return }
-
-      if (!moved && absDx < 12 && absDy < 12 && dt < 250) {
-        // Tap = rotate
-        doRotate()
-      } else if (absDx > absDy && absDx > 20) {
-        // Horizontal swipe — move by cells
-        const cells = Math.round(absDx / 30)
-        const dir = dx > 0 ? 1 : -1
-        for (let i = 0; i < Math.max(1, cells); i++) doMove(dir)
-      } else if (dy > 60) {
-        // Swipe down (long) = hard drop
-        doHardDrop()
-      } else if (dy > 15 && absDy > absDx) {
-        // Short swipe down = soft drop one step
-        moveDown()
+      if (!pausedRef.current && !gameOverRef.current) {
+        if (direction === null && absDx < 10 && absDy < 10 && dt < 300) {
+          // Tap = rotate
+          doRotate()
+        } else if (direction === 'v' && dy > 80) {
+          // Fast hard swipe down = hard drop
+          doHardDrop()
+        }
       }
 
-      t0 = null
+      t0 = null; direction = null
     }
 
     el.addEventListener('touchstart', onStart, { passive: true })
@@ -282,7 +316,7 @@ export function Tetris() {
       el.removeEventListener('touchmove', onMove)
       el.removeEventListener('touchend', onEnd)
     }
-  }, [screen, doMove, doRotate, doHardDrop, moveDown])
+  }, [screen, doRotate, doHardDrop])
 
   const displayBoard = () => {
     const b = board.map(r => [...r])
@@ -324,8 +358,8 @@ export function Tetris() {
         Play
       </button>
       <div style={{ fontSize:11, color:'var(--text-3)', textAlign:'center', lineHeight:2 }}>
-        <strong>Desktop:</strong> ← → move · ↑/X rotate · ↓ soft drop · Space hard drop<br/>
-        <strong>Mobile:</strong> Tap to rotate · swipe ← → to move · swipe ↓ to drop
+        <strong>Keys:</strong> WASD / ↑←↓→ · Space = hard drop · P = pause<br/>
+        <strong>Mobile:</strong> Tap = rotate · drag left/right = move · drag down = drop
       </div>
     </div>
   )
