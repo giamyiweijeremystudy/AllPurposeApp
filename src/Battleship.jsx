@@ -266,13 +266,10 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
 
   const placedSet = new Set(placed.map(s=>s.name))
   const allPlaced = placed.length === SHIPS.length
-  const [dbg, setDbg] = useState(null) // debug: {px,py,cell}
-
   const getGridCell = (cx, cy) => {
     const el=gridRef.current; if(!el) return null
     const rect=el.getBoundingClientRect()
     const c=Math.floor((cx-rect.left)/cs), r=Math.floor((cy-rect.top)/cs)
-    setDbg({px:Math.round(cx-rect.left), py:Math.round(cy-rect.top), c, r, rl:Math.round(rect.left), cs})
     if(r<0||r>=SIZE||c<0||c>=SIZE) return null
     return [r,c]
   }
@@ -365,14 +362,24 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   }
   const reset = () => { setPlaced([]); setHoriz(Object.fromEntries(SHIPS.map(s=>[s.name,true]))) }
 
-  // Ghost ship following cursor
+  // Ghost ship following cursor — snap to grid cell so it aligns with preview
   const GhostShip = ghost ? (() => {
+    const el=gridRef.current
     const w=ghost.h?ghost.len*cs:cs, h=ghost.h?cs:ghost.len*cs
+    // If we have a preview cell, snap ghost to that grid position
+    if (el && preview) {
+      const rect=el.getBoundingClientRect()
+      const snapX=rect.left + preview.c0*cs
+      const snapY=rect.top  + preview.r0*cs
+      return (
+        <div style={{position:'fixed',left:snapX,top:snapY,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.75}}>
+          <ShipModel name={ghost.name} len={ghost.len} horiz={ghost.h} cs={cs} sunk={false} hit={false}/>
+        </div>
+      )
+    }
+    // Fallback: center on cursor
     return (
-      <div style={{
-        position:'fixed', left:ghost.x-w/2, top:ghost.y-h/2,
-        width:w, height:h, pointerEvents:'none', zIndex:9999, opacity:0.75,
-      }}>
+      <div style={{position:'fixed',left:ghost.x-w/2,top:ghost.y-h/2,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.75}}>
         <ShipModel name={ghost.name} len={ghost.len} horiz={ghost.h} cs={cs} sunk={false} hit={false}/>
       </div>
     )
@@ -416,9 +423,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
             )
           })}
           <div style={{fontSize:9,color:'var(--text-3)',marginTop:4}}>Click ship on board to rotate</div>
-          {dbg&&<div style={{fontSize:9,color:'#fbbf24',marginTop:4,fontFamily:'monospace',background:'#111',padding:4,borderRadius:3}}>
-            px:{dbg.px} py:{dbg.py} → col:{dbg.c} row:{dbg.r} | rect.left:{dbg.rl} cs:{dbg.cs}
-          </div>}
+
         </div>
 
         {/* Placement grid */}
