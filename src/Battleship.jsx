@@ -322,12 +322,27 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     const onMove = (e) => {
       if (!drag.current) return
       const {clientX,clientY}=e.touches?e.touches[0]:e
+      const d=drag.current
+      // Pending: check if moved enough to start drag
+      if (d.pending) {
+        if (Math.hypot(clientX-d.startX, clientY-d.startY) < 8) return
+        // Confirm drag — remove from board
+        drag.current={...d, pending:false}
+        setPlaced(prev=>prev.filter(s=>s.name!==d.name))
+      }
       setGhost({x:clientX, y:clientY, name:drag.current.name, len:drag.current.len, h:drag.current.h})
       computePreview(clientX, clientY, drag.current)
     }
     const onUp = (e) => {
       if (!drag.current) return
       const {clientX,clientY}=e.changedTouches?e.changedTouches[0]:e
+      const d=drag.current
+      if (d.pending) {
+        // Was a tap, not a drag — rotate
+        drag.current=null
+        rotateOnBoard(d.name)
+        return
+      }
       commitDrop(clientX, clientY, drag.current)
       drag.current=null
       setGhost(null)
@@ -346,7 +361,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       window.removeEventListener('touchmove', onTouchMovePrevent)
       window.removeEventListener('touchend', onUp)
     }
-  }, [placed, cs]) // re-bind when placed changes so computePreview/commitDrop see fresh state
+  }, [placed, cs])
 
   const startDrag = (e, name, len, h, offR=0, offC=0) => {
     e.preventDefault()
@@ -456,61 +471,25 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                 return (
                   <div key={ship.name}
                     onMouseDown={e=>{
-                      // Only start drag after threshold to allow click-to-rotate
-                      const sx=e.clientX,sy=e.clientY
+                      e.preventDefault()
                       const rect=gridRef.current.getBoundingClientRect()
-                      const rawR=Math.floor((sy-rect.top)/cs)
-                      const rawC=Math.floor((sx-rect.left)/cs)
-                      const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
-                      const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
-                      let moved=false
-                      const onM=(mv)=>{
-                        if(!moved&&Math.hypot(mv.clientX-sx,mv.clientY-sy)>8){
-                          moved=true
-                          setPlaced(prev=>prev.filter(s=>s.name!==ship.name))
-                          drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC}
-                          setGhost({x:mv.clientX,y:mv.clientY,name:ship.name,len:ship.len,h:ship.horiz})
-                        }
-                        if(moved){ setGhost({x:mv.clientX,y:mv.clientY,name:ship.name,len:ship.len,h:ship.horiz}); computePreview(mv.clientX,mv.clientY,drag.current) }
-                      }
-                      const onU=(uv)=>{
-                        window.removeEventListener('mousemove',onM)
-                        window.removeEventListener('mouseup',onU)
-                        if(moved){ commitDrop(uv.clientX,uv.clientY,drag.current); drag.current=null; setGhost(null); setPreview(null) }
-                        else rotateOnBoard(ship.name)
-                      }
-                      window.addEventListener('mousemove',onM)
-                      window.addEventListener('mouseup',onU)
+                      const rawR=Math.floor((e.clientY-rect.top)/cs)
+                      const rawC=Math.floor((e.clientX-rect.left)/cs)
+                      const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
+                      const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:e.clientX,startY:e.clientY}
                     }}
                     onTouchStart={e=>{
                       e.preventDefault()
-                      const t=e.touches[0],sx=t.clientX,sy=t.clientY
+                      const t=e.touches[0]
                       const rect=gridRef.current.getBoundingClientRect()
-                      const rawR=Math.floor((sy-rect.top)/cs)
-                      const rawC=Math.floor((sx-rect.left)/cs)
-                      const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
-                      const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
-                      let moved=false
-                      const onM=(mv)=>{
-                        mv.preventDefault()
-                        const tt=mv.touches[0]
-                        if(!moved&&Math.hypot(tt.clientX-sx,tt.clientY-sy)>8){
-                          moved=true
-                          setPlaced(prev=>prev.filter(s=>s.name!==ship.name))
-                          drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC}
-                        }
-                        if(moved){ setGhost({x:tt.clientX,y:tt.clientY,name:ship.name,len:ship.len,h:ship.horiz}); computePreview(tt.clientX,tt.clientY,drag.current) }
-                      }
-                      const onU=(uv)=>{
-                        window.removeEventListener('touchmove',onM)
-                        window.removeEventListener('touchend',onU)
-                        if(moved){ const tt=uv.changedTouches[0]; commitDrop(tt.clientX,tt.clientY,drag.current); drag.current=null; setGhost(null); setPreview(null) }
-                        else rotateOnBoard(ship.name)
-                      }
-                      window.addEventListener('touchmove',onM,{passive:false})
-                      window.addEventListener('touchend',onU)
+                      const rawR=Math.floor((t.clientY-rect.top)/cs)
+                      const rawC=Math.floor((t.clientX-rect.left)/cs)
+                      const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
+                      const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:t.clientX,startY:t.clientY}
                     }}
-                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5}}
+                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none'}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
                   </div>
