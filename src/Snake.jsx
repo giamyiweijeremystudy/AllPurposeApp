@@ -143,36 +143,7 @@ export function Snake() {
     return () => window.removeEventListener('keydown', down)
   }, [screen, setDir, togglePause])
 
-  // Touch swipe on board
   const boardRef = useRef(null)
-  useEffect(() => {
-    if (screen !== 'game') return
-    const el = boardRef.current
-    if (!el) return
-    let t0 = null
-    const onStart = (e) => {
-      e.preventDefault()
-      const t = e.touches[0]
-      t0 = { x: t.clientX, y: t.clientY }
-    }
-    const onEnd = (e) => {
-      if (!t0) return
-      const t = e.changedTouches[0]
-      const dx = t.clientX - t0.x
-      const dy = t.clientY - t0.y
-      const adx = Math.abs(dx), ady = Math.abs(dy)
-      if (Math.max(adx, ady) < 12) return
-      if (adx > ady) setDir(dx > 0 ? DIR.RIGHT : DIR.LEFT)
-      else setDir(dy > 0 ? DIR.DOWN : DIR.UP)
-      t0 = null
-    }
-    el.addEventListener('touchstart', onStart, { passive: false })
-    el.addEventListener('touchend',   onEnd,   { passive: true })
-    return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchend',   onEnd)
-    }
-  }, [screen, setDir, boardW, boardH])
 
   useEffect(() => () => clearInterval(tickRef.current), [])
 
@@ -231,7 +202,7 @@ export function Snake() {
       </button>
       <div style={{ fontSize:11, color:'var(--text-3)', textAlign:'center', lineHeight:2 }}>
         <b>Keys:</b> WASD / arrows · P = pause<br/>
-        <b>Mobile:</b> Swipe the board or use the d-pad
+        <b>Mobile:</b> Use the d-pad
       </div>
     </div>
   )
