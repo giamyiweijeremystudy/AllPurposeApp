@@ -87,6 +87,7 @@ export function Tetris() {
   const [paused, setPaused] = useState(false)
 
   const tickRef = useRef(null)
+  const tickFnRef = useRef(null)
   const boardElRef = useRef(null)
   const pausedRef = useRef(false)
 
@@ -141,7 +142,7 @@ export function Tetris() {
     if (newMs !== g.currentMs) {
       g.currentMs = newMs
       clearInterval(tickRef.current)
-      tickRef.current = setInterval(tick, newMs)
+      tickRef.current = setInterval(() => tickFnRef.current?.(), newMs)
     }
   }, [pushRender])
 
@@ -158,6 +159,8 @@ export function Tetris() {
       lock()
     }
   }, [pushRender, lock])
+  // Always keep tickFnRef pointing to latest tick
+  useEffect(() => { tickFnRef.current = tick }, [tick])
 
   // ── Move / rotate helpers ────────────────────────────────────
   const moveX = useCallback((dir) => {
@@ -217,7 +220,7 @@ export function Tetris() {
     pushRender()
     setScreen('game')
 
-    tickRef.current = setInterval(tick, 500)
+    tickRef.current = setInterval(() => tickFnRef.current?.(), 500)
   }, [tick, pushRender])
 
   // ── Pause ────────────────────────────────────────────────────
@@ -229,7 +232,7 @@ export function Tetris() {
       tickRef.current = null
     } else {
       const ms = G.current?.currentMs || 500
-      tickRef.current = setInterval(tick, ms)
+      tickRef.current = setInterval(() => tickFnRef.current?.(), ms)
     }
   }, [tick])
 
@@ -363,7 +366,8 @@ export function Tetris() {
 
   const CELL = 28
   const ns = { userSelect:'none', WebkitUserSelect:'none' }
-  const level = Math.floor(lines / 10) + 1
+  const milestone = lines >= 100 ? 4 : lines >= 75 ? 3 : lines >= 50 ? 2 : lines >= 25 ? 2 : 1
+  const level = milestone
 
   // ── Screens ───────────────────────────────────────────────────
   if (screen === 'menu') return (
