@@ -115,15 +115,9 @@ export function Tetris() {
     g.lines += cleared
     g.score += [0, 100, 300, 500, 800][cleared] || 0
 
-    // Spawn next piece
-    const p = g.next
-    const n = randomPiece()
-    const x = spawnX(p.shape)
-    const y = 0
-
-    // ── GAME OVER: new piece immediately collides at spawn ────
-    // This is the ONLY place we check for game over
-    if (collides(swept, p.shape, x, y)) {
+    // ── GAME OVER: blocks have reached the top row ──────────
+    // Check if any cell in row 0 of the board is now filled
+    if (swept[0].some(c => c !== null)) {
       g.piece = null
       g.board = swept
       pushRender()
@@ -132,6 +126,12 @@ export function Tetris() {
       setScreen('over')
       return
     }
+
+    // Spawn next piece
+    const p = g.next
+    const n = randomPiece()
+    const x = spawnX(p.shape)
+    const y = 0
 
     g.piece = { ...p, x, y }
     g.next = n
