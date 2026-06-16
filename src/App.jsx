@@ -180,8 +180,8 @@ export default function App() {
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />
-    if (activeNavItem?.label === 'Snake') return <Snake />
-    if (activeNavItem?.label === 'Battleship') return <Battleship />
+    if (activeNavItem?.label === 'Snake') return null      // rendered persistently below
+    if (activeNavItem?.label === 'Battleship') return null // rendered persistently below
     if (pageWidgets.length === 0) return (
       <div className="empty-state">
         <i className="ti ti-layout-grid" style={{ fontSize:44 }} />
@@ -292,6 +292,18 @@ export default function App() {
         <div className="content">
           {renderContent()}
         </div>
+
+        {/* Persistent game mounts — kept alive across tab switches */}
+        {navItems.some(i => i.label === 'Snake') && (
+          <div style={{ display: activeNavItem?.label === 'Snake' ? 'contents' : 'none' }}>
+            <Snake />
+          </div>
+        )}
+        {navItems.some(i => i.label === 'Battleship') && (
+          <div style={{ display: activeNavItem?.label === 'Battleship' ? 'contents' : 'none' }}>
+            <Battleship />
+          </div>
+        )}
       </main>
 
       {showSettings && user && (
