@@ -83,26 +83,60 @@ function ShipModel({name, len, horiz, cs, sunk, hit, firing}) {
   const col  =sunk?'#7f1d1d':hit?'#b45309':shipColor(name)
   const light=sunk?'#991b1b':hit?'#d97706':'#93c5fd'
   const dark =sunk?'#450a0a':hit?'#92400e':'#1e3a8a'
-  const L=len*cs-p*2, T=cs-p*2
-  return (
-    <svg width={w} height={h} style={{display:'block',overflow:'visible',pointerEvents:'none'}}>
-      <g transform={horiz?`translate(${p},${p})`:`translate(${p},${p}) rotate(90,${T/2},${T/2}) translate(0,${-(L-T)/2})`}>
-        <rect x={0} y={T*0.2} width={L} height={T*0.8} rx={T*0.15} fill={col}/>
-        <rect x={T*0.3} y={T*0.1} width={L-T*0.5} height={T*0.35} rx={T*0.08} fill={light} opacity={0.4}/>
-        <polygon points={`0,${T*0.5} ${T*0.35},${T*0.2} ${T*0.35},${T}`} fill={dark} opacity={0.5}/>
-        <rect x={L-T*0.25} y={T*0.35} width={T*0.25} height={T*0.65} rx={T*0.08} fill={dark} opacity={0.4}/>
-        {len>=4&&<rect x={L*0.35} y={0} width={L*0.22} height={T*0.3} rx={T*0.06} fill={light} opacity={0.6}/>}
-        {len>=3&&<circle cx={L*0.28} cy={T*0.25} r={T*0.09} fill={light} opacity={0.7}/>}
-        {len>=5&&<circle cx={L*0.65} cy={T*0.25} r={T*0.09} fill={light} opacity={0.7}/>}
-        {len>=4&&<line x1={L*0.47} y1={0} x2={L*0.47} y2={-T*0.3} stroke={light} strokeWidth={1.5} opacity={0.6}/>}
-        {len>=3&&<line x1={L*0.28} y1={T*0.25} x2={L*0.28} y2={firing?-T*0.8:-T*0.1} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
-        {len>=5&&<line x1={L*0.65} y1={T*0.25} x2={L*0.65} y2={firing?-T*0.8:-T*0.1} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
-        {firing&&len>=3&&<><circle cx={L*0.28} cy={-T*0.9} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={L*0.28} cy={-T*0.9} r={T*0.1} fill="#fff" opacity={0.8}/></>}
-        {firing&&len>=5&&<><circle cx={L*0.65} cy={-T*0.9} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={L*0.65} cy={-T*0.9} r={T*0.1} fill="#fff" opacity={0.8}/></>}
-        {sunk&&<><line x1={L*0.3} y1={T*0.2} x2={L*0.4} y2={T*0.8} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/><line x1={L*0.6} y1={T*0.15} x2={L*0.7} y2={T*0.9} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/></>}
-      </g>
-    </svg>
-  )
+
+  if (horiz) {
+    // Horizontal: L = length, T = thickness
+    const L=len*cs-p*2, T=cs-p*2
+    return (
+      <svg width={w} height={h} style={{display:'block',overflow:'hidden',pointerEvents:'none'}}>
+        <g transform={`translate(${p},${p})`}>
+          <rect x={0} y={T*0.2} width={L} height={T*0.8} rx={T*0.15} fill={col}/>
+          <rect x={T*0.3} y={T*0.1} width={L-T*0.5} height={T*0.35} rx={T*0.08} fill={light} opacity={0.4}/>
+          <polygon points={`0,${T*0.5} ${T*0.35},${T*0.2} ${T*0.35},${T}`} fill={dark} opacity={0.5}/>
+          <rect x={L-T*0.25} y={T*0.35} width={T*0.25} height={T*0.65} rx={T*0.08} fill={dark} opacity={0.4}/>
+          {len>=4&&<rect x={L*0.35} y={0} width={L*0.22} height={T*0.3} rx={T*0.06} fill={light} opacity={0.6}/>}
+          {len>=3&&<circle cx={L*0.28} cy={T*0.25} r={T*0.09} fill={light} opacity={0.7}/>}
+          {len>=5&&<circle cx={L*0.65} cy={T*0.25} r={T*0.09} fill={light} opacity={0.7}/>}
+          {len>=4&&<line x1={L*0.47} y1={0} x2={L*0.47} y2={T} stroke={light} strokeWidth={1.5} opacity={0.6}/>}
+          {len>=3&&<line x1={L*0.28} y1={0} x2={L*0.28} y2={firing?-T*0.8:0} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
+          {len>=5&&<line x1={L*0.65} y1={0} x2={L*0.65} y2={firing?-T*0.8:0} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
+          {firing&&len>=3&&<><circle cx={L*0.28} cy={-T*0.5} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={L*0.28} cy={-T*0.5} r={T*0.1} fill="#fff" opacity={0.8}/></>}
+          {firing&&len>=5&&<><circle cx={L*0.65} cy={-T*0.5} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={L*0.65} cy={-T*0.5} r={T*0.1} fill="#fff" opacity={0.8}/></>}
+          {sunk&&<><line x1={L*0.3} y1={T*0.2} x2={L*0.4} y2={T*0.8} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/><line x1={L*0.6} y1={T*0.15} x2={L*0.7} y2={T*0.9} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/></>}
+        </g>
+      </svg>
+    )
+  } else {
+    // Vertical: drawn natively — L = length along Y, T = thickness along X
+    const L=len*cs-p*2, T=cs-p*2
+    return (
+      <svg width={w} height={h} style={{display:'block',overflow:'hidden',pointerEvents:'none'}}>
+        <g transform={`translate(${p},${p})`}>
+          {/* Hull — main body, tapered at top (bow) */}
+          <rect x={T*0.2} y={0} width={T*0.8} height={L} rx={T*0.15} fill={col}/>
+          {/* Deck stripe */}
+          <rect x={T*0.1} y={T*0.3} width={T*0.35} height={L-T*0.5} rx={T*0.08} fill={light} opacity={0.4}/>
+          {/* Bow taper at top */}
+          <polygon points={`${T*0.5},0 ${T*0.2},${T*0.35} ${T},${T*0.35}`} fill={dark} opacity={0.5}/>
+          {/* Stern at bottom */}
+          <rect x={T*0.35} y={L-T*0.25} width={T*0.65} height={T*0.25} rx={T*0.08} fill={dark} opacity={0.4}/>
+          {/* Superstructure */}
+          {len>=4&&<rect x={0} y={L*0.35} width={T*0.3} height={L*0.22} rx={T*0.06} fill={light} opacity={0.6}/>}
+          {/* Turrets */}
+          {len>=3&&<circle cx={T*0.25} cy={L*0.28} r={T*0.09} fill={light} opacity={0.7}/>}
+          {len>=5&&<circle cx={T*0.25} cy={L*0.65} r={T*0.09} fill={light} opacity={0.7}/>}
+          {/* Mast — fires upward (left in vertical = toward top of screen, so leftward) */}
+          {len>=4&&<line x1={0} y1={L*0.47} x2={T} y2={L*0.47} stroke={light} strokeWidth={1.5} opacity={0.6}/>}
+          {/* Gun barrels pointing left (upward direction for vertical ship) */}
+          {len>=3&&<line x1={T*0.25} y1={L*0.28} x2={firing?-T*0.8:0} y2={L*0.28} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
+          {len>=5&&<line x1={T*0.25} y1={L*0.65} x2={firing?-T*0.8:0} y2={L*0.65} stroke={light} strokeWidth={2.5} strokeLinecap="round"/>}
+          {firing&&len>=3&&<><circle cx={-T*0.5} cy={L*0.28} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={-T*0.5} cy={L*0.28} r={T*0.1} fill="#fff" opacity={0.8}/></>}
+          {firing&&len>=5&&<><circle cx={-T*0.5} cy={L*0.65} r={T*0.18} fill="#fbbf24" opacity={0.9}/><circle cx={-T*0.5} cy={L*0.65} r={T*0.1} fill="#fff" opacity={0.8}/></>}
+          {sunk&&<><line x1={T*0.2} y1={L*0.3} x2={T*0.8} y2={L*0.4} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/><line x1={T*0.15} y1={L*0.6} x2={T*0.9} y2={L*0.7} stroke="#fca5a5" strokeWidth={1.5} opacity={0.8}/></>}
+        </g>
+      </svg>
+    )
+  }
 }
 
 // ── Animations ────────────────────────────────────────────────
@@ -492,7 +526,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                     style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none'}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
-                    <div style={{position:'absolute',top:0,left:0,fontSize:7,color:'#fbbf24',background:'rgba(0,0,0,0.8)',padding:'1px 2px',pointerEvents:'none',zIndex:99}}>{r0},{c0}</div>
+
                   </div>
                 )
                 })}
