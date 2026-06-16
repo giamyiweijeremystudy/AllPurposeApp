@@ -130,6 +130,24 @@ export const PAGE_ILLUSTRATIONS = {
       <rect x="46" y="22" width="5" height="32" rx="2" fill="#94a3b8"/>
     </svg>
   ),
+  'ti-device-gamepad': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="6" width="52" height="52" rx="8" fill="#bbf7d0"/>
+      {/* Snake body */}
+      <rect x="12" y="20" width="10" height="10" rx="3" fill="#16a34a"/>
+      <rect x="22" y="20" width="10" height="10" rx="3" fill="#22c55e"/>
+      <rect x="32" y="20" width="10" height="10" rx="3" fill="#22c55e"/>
+      <rect x="32" y="30" width="10" height="10" rx="3" fill="#22c55e"/>
+      <rect x="32" y="40" width="10" height="10" rx="3" fill="#22c55e"/>
+      <rect x="22" y="40" width="10" height="10" rx="3" fill="#22c55e"/>
+      {/* Snake head eyes */}
+      <circle cx="16" cy="23" r="1.5" fill="#fff"/>
+      <circle cx="19" cy="23" r="1.5" fill="#fff"/>
+      {/* Food */}
+      <circle cx="14" cy="44" r="5" fill="#ef4444"/>
+      <circle cx="14" cy="44" r="5" fill="#ef4444" opacity="0.4" style={{filter:'blur(3px)'}}/>
+    </svg>
+  ),
   // fallback for unknown icons
   'default': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -171,6 +189,7 @@ export const PAGE_COLORS = {
   'ti-stack': '#94a3b8',
   'ti-layout-grid': '#06b6d4',
   'ti-letter-w': '#538d4e',
+  'ti-device-gamepad': '#16a34a',
   'default':     '#6b7280',
 }
 
@@ -203,6 +222,7 @@ export const PAGE_BG = {
   'ti-stack': '#f8fafc',
   'ti-layout-grid': '#ecfeff',
   'ti-letter-w': '#f0fdf4',
+  'ti-device-gamepad': '#f0fdf4',
   'default':     '#f9fafb',
 }
 
