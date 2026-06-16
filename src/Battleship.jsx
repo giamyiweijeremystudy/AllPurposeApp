@@ -437,15 +437,6 @@ function PlacementBoard({onDone, cellSize, opponentUsername}) {
     }
   }, [dragState, ships, cellSize])
 
-  // Block pull-to-refresh during drag
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const prevent = (e) => { if (dragState) e.preventDefault() }
-    el.addEventListener('touchmove', prevent, {passive:false})
-    return () => el.removeEventListener('touchmove', prevent)
-  }, [dragState])
-
   // Preview rendering
   const preview = dragState && previewCell ? (() => {
     const origin = snapOrigin(previewCell, dragState)
@@ -459,7 +450,7 @@ function PlacementBoard({onDone, cellSize, opponentUsername}) {
   })() : {cells:[], valid:false}
 
   return (
-    <div ref={wrapRef} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%',touchAction:'none'}}>
+    <div ref={wrapRef} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%'}}>
       {opponentUsername&&(
         <div style={{background:'#166534',border:'1px solid #22c55e',borderRadius:'var(--radius)',padding:'8px 16px',color:'#86efac',fontSize:13,fontWeight:600,textAlign:'center',width:'100%',maxWidth:550}}>
           ✅ {opponentUsername} is ready! Place your ships and click Ready.
@@ -542,32 +533,37 @@ function PlacementBoard({onDone, cellSize, opponentUsername}) {
               {/* Placed ship models — click to rotate, drag to reposition */}
               {ships.map(ship => (
                 <div key={ship.name}
-                  onMouseDown={e=>{
+                  onPointerDown={e=>{
+                    e.currentTarget.setPointerCapture(e.pointerId)
                     const rect=gridRef.current.getBoundingClientRect()
                     const localC=Math.floor((e.clientX-rect.left)/cellSize)
                     const localR=Math.floor((e.clientY-rect.top)/cellSize)
-                    const offR=localR-ship.cells[0][0], offC=localC-ship.cells[0][1]
-                    startDrag(e, ship.name, ship.len, ship.horiz, true, Math.max(0,offR), Math.max(0,offC))
+                    const offR=Math.max(0,localR-ship.cells[0][0]), offC=Math.max(0,localC-ship.cells[0][1])
+                    e.currentTarget._dragStartX = e.clientX
+                    e.currentTarget._dragStartY = e.clientY
+                    e.currentTarget._dragOffR = offR
+                    e.currentTarget._dragOffC = offC
+                    e.currentTarget._didDrag = false
                   }}
-                  onTouchStart={e=>{
-                    e.preventDefault()
-                    const t=e.touches[0]
-                    const rect=gridRef.current.getBoundingClientRect()
-                    const localC=Math.floor((t.clientX-rect.left)/cellSize)
-                    const localR=Math.floor((t.clientY-rect.top)/cellSize)
-                    const offR=localR-ship.cells[0][0], offC=localC-ship.cells[0][1]
-                    setDragState({name:ship.name,len:ship.len,horiz:ship.horiz,offsetRow:Math.max(0,offR),offsetCol:Math.max(0,offC),fromBoard:true})
-                    setPreviewCell(getCell(t.clientX,t.clientY))
-                    // Remove from placed while dragging so grid clears
-                    setShips(cur=>cur.filter(s=>s.name!==ship.name))
+                  onPointerMove={e=>{
+                    const dx=e.clientX-e.currentTarget._dragStartX, dy=e.clientY-e.currentTarget._dragStartY
+                    if(!e.currentTarget._didDrag && Math.hypot(dx,dy)>6) {
+                      e.currentTarget._didDrag=true
+                      setShips(cur=>cur.filter(s=>s.name!==ship.name))
+                      setDragState({name:ship.name,len:ship.len,horiz:ship.horiz,offsetRow:e.currentTarget._dragOffR,offsetCol:e.currentTarget._dragOffC,fromBoard:true})
+                    }
+                    if(e.currentTarget._didDrag) setPreviewCell(getCell(e.clientX,e.clientY))
                   }}
-                  onClick={()=>rotateShip(ship.name)}
+                  onPointerUp={e=>{
+                    if(!e.currentTarget._didDrag) rotateShip(ship.name)
+                    e.currentTarget.releasePointerCapture(e.pointerId)
+                  }}
                   style={{
                     position:'absolute',
                     top:ship.cells[0][0]*cellSize, left:ship.cells[0][1]*cellSize,
                     width:ship.horiz?ship.len*cellSize:cellSize,
                     height:ship.horiz?cellSize:ship.len*cellSize,
-                    cursor:'grab', zIndex:5, touchAction:'none',
+                    cursor:'grab', zIndex:5,
                   }}
                 >
                   <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cellSize={cellSize} sunk={false} hit={false}/>
@@ -664,6 +660,19 @@ export function Battleship() {
     : Math.floor(Math.min((win.w-180)/(2*(SIZE+1)), (win.h-160)/(SIZE+1)))
 
   const ns = {userSelect:'none',WebkitUserSelect:'none'}
+
+  // Zero out the .content padding so the game fills edge-to-edge
+  useEffect(() => {
+    const el = document.querySelector('.content')
+    if (!el) return
+    const prev = el.style.padding
+    el.style.padding = '0'
+    el.style.overflowY = 'hidden'
+    return () => {
+      el.style.padding = prev
+      el.style.overflowY = ''
+    }
+  }, [])
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
