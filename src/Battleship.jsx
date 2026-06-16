@@ -175,7 +175,7 @@ function SinkAnim({ship,cs,offsetX=0}) {
   const prog=f/20,op=Math.max(0,1-prog*1.2)
   const [r0,c0]=ship.cells[0]
   return (
-    <div style={{position:'absolute',top:r0*cs,left:(c0+1)*cs+offsetX,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:10,opacity:op,transform:`translateY(${prog*cs*0.7}px) rotate(${prog*(ship.horiz?12:-8)}deg)`,transformOrigin:'center'}}>
+    <div style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:10,opacity:op,transform:`translateY(${prog*cs*0.7}px) rotate(${prog*(ship.horiz?12:-8)}deg)`,transformOrigin:'center'}}>
       <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/>
     </div>
   )
@@ -203,10 +203,17 @@ function BattleGrid({ships,shots,onShot,showShips,cs,disabled,firingShip,impact,
       <div style={{display:'flex',paddingLeft:cs}}>
         {Array.from({length:SIZE},(_,i)=><div key={i} style={{width:cs,textAlign:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600,lineHeight:`${cs*0.7}px`}}>{String.fromCharCode(65+i)}</div>)}
       </div>
-      <div style={{position:'relative',cursor:disabled?'default':'crosshair'}} onMouseLeave={()=>setHover(null)}>
+      <div style={{display:'flex'}}>
+        {/* Row number labels */}
+        <div style={{display:'flex',flexDirection:'column'}}>
+          {Array.from({length:SIZE},(_,r)=>(
+            <div key={r} style={{width:cs,height:cs,display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600}}>{r+1}</div>
+          ))}
+        </div>
+        {/* Cells-only area */}
+        <div style={{position:'relative',cursor:disabled?'default':'crosshair'}} onMouseLeave={()=>setHover(null)}>
         {Array.from({length:SIZE},(_,r)=>(
           <div key={r} style={{display:'flex'}}>
-            <div style={{width:cs,display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600}}>{r+1}</div>
             {Array.from({length:SIZE},(_,c)=>{
               const k=`${r},${c}`,shot=shotSet.has(k)
               const ship=live.find(s=>s.cells.some(([sr,sc])=>sr===r&&sc===c))
@@ -228,17 +235,18 @@ function BattleGrid({ships,shots,onShot,showShips,cs,disabled,firingShip,impact,
           if(rendered.has(ship.name)) return null; rendered.add(ship.name)
           if(sinkShip?.name===ship.name) return null
           const [r0,c0]=ship.cells[0],hasHit=ship.cells.some(([r,c])=>shotSet.has(`${r},${c}`))
-          return <div key={ship.name} style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:5,opacity:ship.sunk?0:1,transition:'opacity 0.3s',filter:firingShip?.name===ship.name?'brightness(1.3)':'none'}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={ship.sunk} hit={hasHit&&!ship.sunk} firing={firingShip?.name===ship.name}/></div>
+          return <div key={ship.name} style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:5,opacity:ship.sunk?0:1,transition:'opacity 0.3s',filter:firingShip?.name===ship.name?'brightness(1.3)':'none'}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={ship.sunk} hit={hasHit&&!ship.sunk} firing={firingShip?.name===ship.name}/></div>
         })}
         {/* Sunk enemy ships revealed */}
         {sunkEnemy&&sunkEnemy.filter(s=>s.sunk).map(ship=>{
           const [r0,c0]=ship.cells[0]
-          return <div key={`se-${ship.name}`} style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:4,opacity:0.65}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/></div>
+          return <div key={`se-${ship.name}`} style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,pointerEvents:'none',zIndex:4,opacity:0.65}}><ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk hit={false}/></div>
         })}
         {sinkShip&&<SinkAnim ship={sinkShip} cs={cs}/>}
         {shell&&<ShellArc srcX={shell.sx} srcY={shell.sy} dstX={shell.dx} dstY={shell.dy} onLand={onLand}/>}
-        {impact?.type==='explosion'&&<Explosion x={(impact.cell[1]+1.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
-        {impact?.type==='splash'&&<Splash x={(impact.cell[1]+1.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
+        {impact?.type==='explosion'&&<Explosion x={(impact.cell[1]+0.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
+        {impact?.type==='splash'&&<Splash x={(impact.cell[1]+0.5)*cs} y={(impact.cell[0]+0.5)*cs} cs={cs}/>}
+        </div>
       </div>
     </div>
   )
@@ -262,8 +270,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const getGridCell = (cx, cy) => {
     const el=gridRef.current; if(!el) return null
     const rect=el.getBoundingClientRect()
-    // subtract cs to skip the row-number label column on the left
-    const c=Math.floor((cx-rect.left-cs)/cs), r=Math.floor((cy-rect.top)/cs)
+    const c=Math.floor((cx-rect.left)/cs), r=Math.floor((cy-rect.top)/cs)
     if(r<0||r>=SIZE||c<0||c>=SIZE) return null
     return [r,c]
   }
@@ -416,18 +423,24 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
             <div style={{display:'flex',paddingLeft:cs}}>
               {Array.from({length:SIZE},(_,i)=><div key={i} style={{width:cs,textAlign:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600,lineHeight:`${cs*0.7}px`}}>{String.fromCharCode(65+i)}</div>)}
             </div>
-            <div ref={gridRef} style={{position:'relative'}}>
-              {/* Grid cells with preview overlay */}
-              {Array.from({length:SIZE},(_,r)=>(
-                <div key={r} style={{display:'flex'}}>
-                  <div style={{width:cs,display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600}}>{r+1}</div>
-                  {Array.from({length:SIZE},(_,c)=>{
-                    const isPrev=preview?.cells.some(([pr,pc])=>pr===r&&pc===c)
-                    return <div key={c} style={{width:cs,height:cs,border:'1px solid var(--border)',background:isPrev?(preview.valid?'rgba(99,102,241,0.28)':'rgba(239,68,68,0.28)'):'transparent',boxSizing:'border-box'}}/>
-                  })}
-                </div>
-              ))}
-              {/* Placed ships — tap to rotate, drag to move */}
+            <div style={{display:'flex'}}>
+              {/* Row number labels column */}
+              <div style={{display:'flex',flexDirection:'column'}}>
+                {Array.from({length:SIZE},(_,r)=>(
+                  <div key={r} style={{width:cs,height:cs,display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.max(8,cs*0.35),color:'var(--text-3)',fontWeight:600}}>{r+1}</div>
+                ))}
+              </div>
+              {/* Cell grid — gridRef wraps ONLY the 10x10 cells */}
+              <div ref={gridRef} style={{position:'relative'}}>
+                {Array.from({length:SIZE},(_,r)=>(
+                  <div key={r} style={{display:'flex'}}>
+                    {Array.from({length:SIZE},(_,c)=>{
+                      const isPrev=preview?.cells.some(([pr,pc])=>pr===r&&pc===c)
+                      return <div key={c} style={{width:cs,height:cs,border:'1px solid var(--border)',background:isPrev?(preview.valid?'rgba(99,102,241,0.28)':'rgba(239,68,68,0.28)'):'transparent',boxSizing:'border-box'}}/>
+                    })}
+                  </div>
+                ))}
+                {/* Placed ships — tap to rotate, drag to move */}
               {placed.map(ship=>{
                 const [r0,c0]=ship.cells[0]
                 return (
@@ -437,7 +450,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const sx=e.clientX,sy=e.clientY
                       const rect=gridRef.current.getBoundingClientRect()
                       const rawR=Math.floor((sy-rect.top)/cs)
-                      const rawC=Math.floor((sx-rect.left-cs)/cs)
+                      const rawC=Math.floor((sx-rect.left)/cs)
                       const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
                       let moved=false
@@ -464,7 +477,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const t=e.touches[0],sx=t.clientX,sy=t.clientY
                       const rect=gridRef.current.getBoundingClientRect()
                       const rawR=Math.floor((sy-rect.top)/cs)
-                      const rawC=Math.floor((sx-rect.left-cs)/cs)
+                      const rawC=Math.floor((sx-rect.left)/cs)
                       const offR=ship.horiz ? 0 : Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz ? Math.min(Math.max(0,rawC-c0),ship.len-1) : 0
                       let moved=false
@@ -487,12 +500,13 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       window.addEventListener('touchmove',onM,{passive:false})
                       window.addEventListener('touchend',onU)
                     }}
-                    style={{position:'absolute',top:r0*cs,left:(c0+1)*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5}}
+                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
                   </div>
                 )
-              })}
+                })}
+              </div>
             </div>
           </div>
         </div>
