@@ -336,66 +336,68 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     // horiz state stays true (horizontal) for bank display regardless of grid orientation
   }
 
+  // Use functional setPlaced so rotateOnBoard never needs stale placed closure
   const rotateOnBoard = (name) => {
-    const ship=placed.find(s=>s.name===name)
-    if (!ship) return
-    const newH=!ship.horiz
-    const [r0,c0]=ship.cells[0]
-    // Clamp origin so rotation fits on grid
-    const nr=Math.min(r0, newH?SIZE-1:SIZE-ship.len)
-    const nc=Math.min(c0, newH?SIZE-ship.len:SIZE-1)
-    const grid=buildGrid(placed.filter(s=>s.name!==name))
-    if (!canPlace(grid,name,nr,nc,ship.len,newH)) return
-    const cells=shipCells(nr,nc,ship.len,newH)
-    setPlaced(prev=>[...prev.filter(s=>s.name!==name),{...ship,cells,horiz:newH}])
-    // Do NOT update horiz — bank always stays horizontal
+    setPlaced(prev => {
+      const ship=prev.find(s=>s.name===name)
+      if (!ship) return prev
+      const newH=!ship.horiz
+      const [r0,c0]=ship.cells[0]
+      const nr=newH ? Math.min(r0,SIZE-1) : Math.min(r0,SIZE-ship.len)
+      const nc=newH ? Math.min(c0,SIZE-ship.len) : Math.min(c0,SIZE-1)
+      const grid=buildGrid(prev.filter(s=>s.name!==name))
+      if (!canPlace(grid,name,nr,nc,ship.len,newH)) return prev
+      const cells=shipCells(nr,nc,ship.len,newH)
+      return [...prev.filter(s=>s.name!==name),{...ship,cells,horiz:newH}]
+    })
   }
+  const rotateRef = useRef(rotateOnBoard)
+  useEffect(()=>{ rotateRef.current=rotateOnBoard },[placed])
 
-  // Global pointer listeners for drag
+  // Keep refs to latest computePreview and commitDrop so global listeners never go stale
+  const computePreviewRef = useRef(computePreview)
+  const commitDropRef = useRef(commitDrop)
+  useEffect(()=>{ computePreviewRef.current=computePreview; commitDropRef.current=commitDrop },[placed,cs])
+
+  // Global pointer listeners — registered ONCE, never re-bound
   useEffect(() => {
     const onMove = (e) => {
       if (!drag.current) return
+      e.cancelable && e.preventDefault()
       const {clientX,clientY}=e.touches?e.touches[0]:e
       const d=drag.current
-      // Pending: check if moved enough to start drag
       if (d.pending) {
-        if (Math.hypot(clientX-d.startX, clientY-d.startY) < 8) return
-        // Confirm drag — remove from board
+        if (Math.hypot(clientX-d.startX, clientY-d.startY) < 10) return
         drag.current={...d, pending:false}
         setPlaced(prev=>prev.filter(s=>s.name!==d.name))
       }
       setGhost({x:clientX, y:clientY, name:drag.current.name, len:drag.current.len, h:drag.current.h})
-      computePreview(clientX, clientY, drag.current)
+      computePreviewRef.current(clientX, clientY, drag.current)
     }
     const onUp = (e) => {
       if (!drag.current) return
       const {clientX,clientY}=e.changedTouches?e.changedTouches[0]:e
       const d=drag.current
+      drag.current=null
       if (d.pending) {
-        // Was a tap, not a drag — rotate
-        drag.current=null
-        rotateOnBoard(d.name)
+        rotateRef.current(d.name)
         return
       }
-      commitDrop(clientX, clientY, drag.current)
-      drag.current=null
+      commitDropRef.current(clientX, clientY, d)
       setGhost(null)
       setPreview(null)
     }
-    const onTouchMovePrevent = (e) => { if (drag.current) e.preventDefault() }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     window.addEventListener('touchmove', onMove, {passive:false})
-    window.addEventListener('touchmove', onTouchMovePrevent, {passive:false})
     window.addEventListener('touchend', onUp)
     return () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchmove', onTouchMovePrevent)
       window.removeEventListener('touchend', onUp)
     }
-  }, [placed, cs])
+  }, []) // empty deps — bind once, use refs for fresh values
 
   const startDrag = (e, name, len, h, offR=0, offC=0) => {
     e.preventDefault()
@@ -918,7 +920,7 @@ export function Battleship() {
   )
 
   if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
-    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px',gap:10,...ns}}>
+    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 60px',gap:10,...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
         <span style={{fontWeight:800,fontSize:16}}>Place Your Ships</span>
