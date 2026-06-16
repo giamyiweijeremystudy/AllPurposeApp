@@ -493,7 +493,6 @@ function PlacementBoard({onDone, cellSize, opponentUsername}) {
                     setDragState({name:ship.name,len:ship.len,horiz,offsetRow:0,offsetCol:0,fromBoard:false})
                     setPreviewCell(getCell(t.clientX,t.clientY))
                   }}
-                  onClick={()=>rotateShip(ship.name)}
                   style={{
                     cursor:placed?'default':'grab',
                     display:'inline-block',
@@ -508,7 +507,7 @@ function PlacementBoard({onDone, cellSize, opponentUsername}) {
                 >
                   <ShipModel name={ship.name} len={ship.len} horiz={horiz} cellSize={cellSize} sunk={false} hit={false}/>
                 </div>
-                <span style={{fontSize:9,color:placed?'#22c55e':'var(--text-3)'}}>{placed?'✓':'tap=rotate'}</span>
+                <span style={{fontSize:9,color:placed?'#22c55e':'var(--text-3)'}}>{placed?'✓ placed':'drag to board'}</span>
               </div>
             )
           })}
@@ -940,7 +939,7 @@ export function Battleship() {
   )
 
   if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
-    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',display:'flex',flexDirection:'column',alignItems:'center',padding:12,gap:10,...ns}}>
+    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px',gap:10,...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
         <span style={{fontWeight:800,fontSize:16}}>Place Your Ships</span>
@@ -994,13 +993,13 @@ export function Battleship() {
     )
 
     if(isMobile) return (
-      <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflow:'hidden',...ns}}>
+      <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflowY:'auto',WebkitOverflowScrolling:'touch',...ns}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}>
           <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button>
           <span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span>
         </div>
-        <div style={{padding:'0 8px',width:'100%',flexShrink:0}}><EventBanner event={banner}/></div>
-        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'space-evenly',alignItems:'center',padding:'4px 0',width:'100%'}}>
+        <div style={{padding:'0 6px',width:'100%',flexShrink:0}}><EventBanner event={banner}/></div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,padding:'8px 0 16px'}}>
           {enemyGridEl}
           {playerGridEl}
         </div>
@@ -1050,13 +1049,13 @@ export function Battleship() {
     )
 
     if(isMobile) return (
-      <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflow:'hidden',...ns}}>
+      <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflowY:'auto',WebkitOverflowScrolling:'touch',...ns}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}>
           <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button>
           <span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span>
         </div>
-        <div style={{padding:'0 8px',width:'100%',flexShrink:0}}><EventBanner event={oBanner}/></div>
-        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'space-evenly',alignItems:'center',padding:'4px 0',width:'100%'}}>
+        <div style={{padding:'0 6px',width:'100%',flexShrink:0}}><EventBanner event={oBanner}/></div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,padding:'8px 0 16px'}}>
           {enemyGridEl}
           {isMyTurnOnline&&<div style={{flexShrink:0}}>{fireBtn}</div>}
           {myGridEl}
