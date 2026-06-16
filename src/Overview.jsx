@@ -133,19 +133,32 @@ export const PAGE_ILLUSTRATIONS = {
   'ti-device-gamepad': (
     <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="6" y="6" width="52" height="52" rx="8" fill="#bbf7d0"/>
-      {/* Snake body */}
       <rect x="12" y="20" width="10" height="10" rx="3" fill="#16a34a"/>
       <rect x="22" y="20" width="10" height="10" rx="3" fill="#22c55e"/>
       <rect x="32" y="20" width="10" height="10" rx="3" fill="#22c55e"/>
       <rect x="32" y="30" width="10" height="10" rx="3" fill="#22c55e"/>
       <rect x="32" y="40" width="10" height="10" rx="3" fill="#22c55e"/>
       <rect x="22" y="40" width="10" height="10" rx="3" fill="#22c55e"/>
-      {/* Snake head eyes */}
       <circle cx="16" cy="23" r="1.5" fill="#fff"/>
       <circle cx="19" cy="23" r="1.5" fill="#fff"/>
-      {/* Food */}
       <circle cx="14" cy="44" r="5" fill="#ef4444"/>
-      <circle cx="14" cy="44" r="5" fill="#ef4444" opacity="0.4" style={{filter:'blur(3px)'}}/>
+    </svg>
+  ),
+  'ti-anchor': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Ocean */}
+      <rect x="4" y="38" width="56" height="22" rx="6" fill="#bfdbfe"/>
+      {/* Ship hull */}
+      <path d="M14 38 L50 38 L46 50 L18 50 Z" fill="#1d4ed8"/>
+      {/* Ship deck */}
+      <rect x="20" y="28" width="24" height="10" rx="2" fill="#2563eb"/>
+      {/* Mast */}
+      <rect x="30" y="14" width="4" height="16" rx="1" fill="#1e40af"/>
+      {/* Flag */}
+      <path d="M34 14 L44 18 L34 22 Z" fill="#ef4444"/>
+      {/* Hit markers */}
+      <circle cx="22" cy="44" r="3" fill="#ef4444" opacity="0.8"/>
+      <circle cx="42" cy="46" r="2" fill="#60a5fa" opacity="0.8"/>
     </svg>
   ),
   // fallback for unknown icons
@@ -190,6 +203,7 @@ export const PAGE_COLORS = {
   'ti-layout-grid': '#06b6d4',
   'ti-letter-w': '#538d4e',
   'ti-device-gamepad': '#16a34a',
+  'ti-anchor': '#1d4ed8',
   'default':     '#6b7280',
 }
 
@@ -223,6 +237,7 @@ export const PAGE_BG = {
   'ti-layout-grid': '#ecfeff',
   'ti-letter-w': '#f0fdf4',
   'ti-device-gamepad': '#f0fdf4',
+  'ti-anchor': '#eff6ff',
   'default':     '#f9fafb',
 }
 
