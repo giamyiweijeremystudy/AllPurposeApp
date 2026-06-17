@@ -559,7 +559,7 @@ function ShipHealth({ships,shots,label}) {
 }
 
 // ── Main ──────────────────────────────────────────────────────
-export function Battleship({active=true}) {
+export function Battleship() {
   const [screen,setScreen]=useState('menu')
   const [mode,setMode]=useState(null)
   const [user,setUser]=useState(null)
@@ -637,16 +637,7 @@ export function Battleship({active=true}) {
 
   const ns={userSelect:'none',WebkitUserSelect:'none'}
 
-  // Remove .content padding when game is the active view
-  // We receive `active` prop from App — only apply when truly visible
-  useEffect(()=>{
-    if(!active) return
-    const el=document.querySelector('.content')
-    if(!el) return
-    const oldP=el.style.padding, oldO=el.style.overflowY
-    el.style.padding='0'; el.style.overflowY='hidden'
-    return()=>{ el.style.padding=oldP; el.style.overflowY=oldO }
-  },[active])
+
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
