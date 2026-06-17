@@ -1153,11 +1153,9 @@ export function Battleship() {
           <button onClick={leaveLobby} style={{padding:'10px 20px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
             {isHost?'Close Lobby':'Leave Lobby'}
           </button>
-          {guestName&&(
-            <button onClick={toggleReady} style={{padding:'10px 24px',background:myReady?'var(--bg-3)':'var(--accent)',border:myReady?'1px solid var(--border-2)':'none',borderRadius:'var(--radius)',color:myReady?'var(--text)':'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
-              {myReady?'Unready':'Ready'}
-            </button>
-          )}
+          <button onClick={toggleReady} style={{padding:'10px 24px',background:myReady?'var(--bg-3)':'var(--accent)',border:myReady?'1px solid var(--border-2)':'none',borderRadius:'var(--radius)',color:myReady?'var(--text)':'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+            {myReady?'Unready':'Ready'}
+          </button>
         </div>
       </div>
     )
