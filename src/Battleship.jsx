@@ -293,8 +293,9 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const placedRef = useRef([])
   useEffect(()=>{ placedRef.current=placed },[placed])
 
-  const drag    = useRef(null)
-  const gridRef = useRef(null)
+  const drag         = useRef(null)
+  const draggingName = useRef(null) // ship being dragged from board (hidden but not removed)
+  const gridRef      = useRef(null)
   const [ghost,   setGhost]   = useState(null)
   const [preview, setPreview] = useState(null)
 
@@ -368,10 +369,10 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       const {clientX,clientY}=e.touches?e.touches[0]:e
       const d=drag.current
       if(d.pending){
-        // Both desktop and mobile: confirm drag after 12px movement
         if(Math.hypot(clientX-d.startX,clientY-d.startY)<12) return
         drag.current={...d,pending:false}
-        setPlaced(prev=>prev.filter(s=>s.name!==d.name))
+        // Hide ship visually (opacity) without re-rendering placed array
+        draggingName.current=d.fromBoard?d.name:null
       }
       setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
       doPreview(clientX,clientY,drag.current)
@@ -381,12 +382,26 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       const {clientX,clientY}=e.changedTouches?e.changedTouches[0]:e
       const d=drag.current
       drag.current=null
+      draggingName.current=null
       setGhost(null)
       setPreview(null)
       if(d.pending){
-        doRotate(d.name)  // moved <12px = tap = rotate
+        doRotate(d.name)
       } else {
-        doDrop(clientX,clientY,d)
+        // Remove from placed then drop (single state update = no jank)
+        if(d.fromBoard){
+          setPlaced(prev=>{
+            const remaining=prev.filter(s=>s.name!==d.name)
+            const pos=snapPos(clientX,clientY,d)
+            if(!pos) return prev // dropped outside grid — put back
+            const grid=buildGrid(remaining)
+            if(!canPlace(grid,d.name,pos.r0,pos.c0,d.len,d.h)) return prev
+            const cells=shipCells(pos.r0,pos.c0,d.len,d.h)
+            return [...remaining,{name:d.name,len:d.len,cells,horiz:d.h,sunk:false}]
+          })
+        } else {
+          doDrop(clientX,clientY,d)
+        }
       }
     }
     // Must be non-passive to preventDefault on touchmove (stops page scroll during drag)
@@ -426,7 +441,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   })():null
 
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%'}}>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%',touchAction:'none'}}>
       {GhostShip}
       {opponentUsername&&(
         <div style={{background:'#166534',border:'1px solid #22c55e',borderRadius:'var(--radius)',padding:'8px 16px',color:'#86efac',fontSize:13,fontWeight:600,textAlign:'center',width:'100%',maxWidth:550}}>
@@ -512,7 +527,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const rawC=Math.floor((e.clientX-rect.left)/cs)
                       const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
-                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:e.clientX,startY:e.clientY}
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,fromBoard:true,startX:e.clientX,startY:e.clientY}
                     }}
                     onTouchStart={e=>{
                       e.preventDefault()
@@ -522,9 +537,9 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const rawC=Math.floor((t.clientX-rect.left)/cs)
                       const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
-                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:t.clientX,startY:t.clientY}
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,fromBoard:true,startX:t.clientX,startY:t.clientY}
                     }}
-                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none',WebkitUserSelect:'none'}}
+                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none',WebkitUserSelect:'none',opacity:ghost&&ghost.name===ship.name&&!drag.current?.pending?0:1,transition:'opacity 0.1s'}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
 
@@ -912,7 +927,7 @@ export function Battleship() {
   )
 
   if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
-    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,...ns}}>
+    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,touchAction:'none',...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
         <span style={{fontWeight:800,fontSize:16}}>Place Your Ships</span>
