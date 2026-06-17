@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { loadState } from './db.js'
 import { ScheduleDashboard } from './ScheduleDashboard.jsx'
 import { TaskManager } from './TaskManager.jsx'
@@ -15,25 +15,7 @@ import { Hanoi } from './Hanoi.jsx'
 import { Snake } from './Snake.jsx'
 import { Battleship } from './Battleship.jsx'
 
-export default 
-class BattleshipErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null } }
-  static getDerivedStateFromError(e) { return { error: e } }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,background:'var(--bg)',padding:24}}>
-          <div style={{color:'var(--danger)',fontWeight:700,fontSize:16}}>Battleship crashed</div>
-          <div style={{color:'var(--text-2)',fontSize:12,fontFamily:'monospace',maxWidth:400,wordBreak:'break-all'}}>{this.state.error.message}</div>
-          <button onClick={()=>this.setState({error:null})} style={{padding:'8px 16px',background:'var(--accent)',color:'#fff',border:'none',borderRadius:'var(--radius)',cursor:'pointer',fontFamily:'inherit'}}>Retry</button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-function App() {
+export default function App() {
   const [state, setState] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeNav, setActiveNav] = useState(null)
@@ -330,9 +312,7 @@ function App() {
               visibility: activeNavItem?.label === 'Battleship' ? 'visible' : 'hidden',
               pointerEvents: activeNavItem?.label === 'Battleship' ? 'auto' : 'none',
             }}>
-              <BattleshipErrorBoundary>
-                <Battleship />
-              </BattleshipErrorBoundary>
+              <Battleship />
             </div>
           )}
         </div>
