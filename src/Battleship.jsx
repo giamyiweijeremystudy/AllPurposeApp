@@ -648,6 +648,12 @@ export function Battleship() {
   const myShotsRef = useRef([])
   const lobbyRef = useRef(null)
   const subRef = useRef(null)
+  const userRef = useRef(null)
+  const opponentProfileRef = useRef(null)
+  const guestProfileRef = useRef(null)
+  useEffect(()=>{ userRef.current=user },[user])
+  useEffect(()=>{ opponentProfileRef.current=opponentProfile },[opponentProfile])
+  useEffect(()=>{ guestProfileRef.current=guestProfile },[guestProfile])
   useEffect(()=>{ myShipsRef.current=myShips },[myShips])
   useEffect(()=>{ oppShotsRef.current=oppShots },[oppShots])
   useEffect(()=>{ myShotsRef.current=myShots },[myShots])
@@ -856,32 +862,9 @@ export function Battleship() {
   const subscribeToLobby=(lobbyId)=>{
     if(subRef.current) subRef.current.unsubscribe()
     subRef.current=supabase.channel(`bs:${lobbyId}`)
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},p=>{
-        const updated=p.new
-        setLobby(updated); lobbyRef.current=updated
-        if(updated.guest_id) {
-          supabase.from('profiles').select('*').eq('id',updated.guest_id).single()
-            .then(({data})=>{ if(data){ setGuestProfile(data); if(updated.host_id!==user?.id) setOpponentProfile(data) } })
-        } else {
-          setGuestProfile(null)
-        }
-        if(updated.status==='placing'){
-          if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
-          setCountdown(null)
-          setOnlinePhase('placing')
-        } else if(updated.countdown_start){
-          runCountdownFrom(updated.countdown_start)
-        } else if(!updated.countdown_start && countdownTimerRef.current){
-          clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
-          setCountdown(null)
-        }
-      })
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
-        const row=p.new
-        if(!row||row.user_id===user?.id) return
-        supabase.from('profiles').select('*').eq('id',row.user_id).single()
-          .then(({data})=>{ if(data){ setOpponentProfile(data); setGuestProfile(data) } })
-      })
+      // Lobby row changes (guest join, ready, countdown, status) are handled by
+      // the polling fallback below — avoids stale-closure bugs from this channel
+      // callback being bound once at subscribe time with old user/profile values.
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
         const row=p.new
         if(!row) return
@@ -959,9 +942,10 @@ export function Battleship() {
   useEffect(()=>{
     if(mode!=='online'||onlinePhase!=='waiting_lobby'||!lobbyRef.current) return
     const poll=async()=>{
+      if(!lobbyRef.current) return
       const{data}=await supabase.from('battleship_lobbies').select('*').eq('id',lobbyRef.current.id).single()
       if(!data){
-        const hostName=opponentProfile?.username||guestProfile?.username||'Host'
+        const hostName=opponentProfileRef.current?.username||guestProfileRef.current?.username||'Host'
         setKickedMsg(`${hostName} has closed the lobby.`)
         setLobby(null); lobbyRef.current=null; setOnlinePhase('lobby'); loadLobbies()
         return
@@ -969,8 +953,8 @@ export function Battleship() {
       const prev=lobbyRef.current
       setLobby(data); lobbyRef.current=data
       if(data.guest_id && data.guest_id!==prev?.guest_id){
-        supabase.from('profiles').select('*').eq('id',data.guest_id).single()
-          .then(({data:p})=>{ if(p){ setGuestProfile(p); if(data.host_id!==user?.id) setOpponentProfile(p) } })
+        const{data:p}=await supabase.from('profiles').select('*').eq('id',data.guest_id).single()
+        if(p){ setGuestProfile(p); if(data.host_id!==userRef.current?.id) setOpponentProfile(p) }
       }
       if(!data.guest_id) setGuestProfile(null)
       if(data.status==='placing'){
