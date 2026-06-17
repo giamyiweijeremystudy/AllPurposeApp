@@ -115,7 +115,7 @@ export default function App() {
           {[60,80,70,55,75].map((w,i) => <div key={i} className="skeleton" style={{ height:12, width:`${w}%`, borderRadius:4 }} />)}
         </div>
       </aside>
-      <main className="main" style={{position:'relative'}}>
+      <main className="main">
         <div className="topbar">
           <div className="skeleton" style={{ height:14, width:120, borderRadius:4 }} />
         </div>
@@ -232,7 +232,7 @@ export default function App() {
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="main" style={{position:'relative'}}>
+      <main className="main">
 
         {/* Topbar */}
         <div className="topbar">
@@ -292,27 +292,26 @@ export default function App() {
         {/* Content */}
         <div className="content">
           {renderContent()}
+          {/* Persistent game mounts inside content — inset:0 fills content area only */}
+          {navItems.some(i => i.label === 'Snake') && (
+            <div style={{
+              position:'absolute', inset:0, zIndex:1,
+              visibility: activeNavItem?.label === 'Snake' ? 'visible' : 'hidden',
+              pointerEvents: activeNavItem?.label === 'Snake' ? 'auto' : 'none',
+            }}>
+              <Snake />
+            </div>
+          )}
+          {navItems.some(i => i.label === 'Battleship') && (
+            <div style={{
+              position:'absolute', inset:0, zIndex:1,
+              visibility: activeNavItem?.label === 'Battleship' ? 'visible' : 'hidden',
+              pointerEvents: activeNavItem?.label === 'Battleship' ? 'auto' : 'none',
+            }}>
+              <Battleship />
+            </div>
+          )}
         </div>
-
-        {/* Persistent game mounts — kept alive across tab switches, hidden via pointer-events+visibility */}
-        {navItems.some(i => i.label === 'Snake') && (
-          <div style={{
-            position:'absolute', inset:0, zIndex:1,
-            visibility: activeNavItem?.label === 'Snake' ? 'visible' : 'hidden',
-            pointerEvents: activeNavItem?.label === 'Snake' ? 'auto' : 'none',
-          }}>
-            <Snake />
-          </div>
-        )}
-        {navItems.some(i => i.label === 'Battleship') && (
-          <div style={{
-            position:'absolute', inset:0, zIndex:1,
-            visibility: activeNavItem?.label === 'Battleship' ? 'visible' : 'hidden',
-            pointerEvents: activeNavItem?.label === 'Battleship' ? 'auto' : 'none',
-          }}>
-            <Battleship />
-          </div>
-        )}
       </main>
 
       {showSettings && user && (
