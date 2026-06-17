@@ -293,10 +293,12 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const placedRef = useRef([])
   useEffect(()=>{ placedRef.current=placed },[placed])
 
-  const drag    = useRef(null)
-  const gridRef = useRef(null)
+  const drag      = useRef(null)
+  const holdTimer = useRef(null)  // mobile: 1s hold before drag activates
+  const gridRef   = useRef(null)
   const [ghost,   setGhost]   = useState(null)
   const [preview, setPreview] = useState(null)
+  const [holding, setHolding] = useState(false) // visual feedback during hold
 
   const placedSet = new Set(placed.map(s=>s.name))
   const allPlaced = placed.length === SHIPS.length
@@ -362,23 +364,32 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
 
   // Single global listener, registered once — all logic via refs/functional updates
   useEffect(()=>{
+    const cancelHold=()=>{
+      if(holdTimer.current){ clearTimeout(holdTimer.current); holdTimer.current=null }
+      setHolding(false)
+    }
     const onMove=(e)=>{
       if (!drag.current) return
       e.cancelable && e.preventDefault()
       const {clientX,clientY}=e.touches?e.touches[0]:e
       const d=drag.current
       if (d.pending){
-        // Show ghost immediately so user sees ship following finger
-        setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
-        if (Math.hypot(clientX-d.startX,clientY-d.startY)<20) return
-        // Threshold crossed — confirm drag, remove from board
-        drag.current={...d,pending:false}
-        setPlaced(prev=>prev.filter(s=>s.name!==d.name))
+        // On mobile: cancel hold if finger moved too much before 1s
+        if (d.touch && Math.hypot(clientX-d.startX,clientY-d.startY)>10){
+          cancelHold(); drag.current=null; setGhost(null); return
+        }
+        // On desktop: start drag after 8px movement
+        if (!d.touch){
+          if (Math.hypot(clientX-d.startX,clientY-d.startY)<8) return
+          drag.current={...d,pending:false}
+          setPlaced(prev=>prev.filter(s=>s.name!==d.name))
+        } else return // mobile: wait for hold timer to confirm drag
       }
       setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
       doPreview(clientX,clientY,drag.current)
     }
     const onUp=(e)=>{
+      cancelHold()
       if (!drag.current) return
       const {clientX,clientY}=e.changedTouches?e.changedTouches[0]:e
       const d=drag.current
@@ -386,6 +397,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       setGhost(null)
       setPreview(null)
       if (d.pending){
+        // Was a tap (no hold confirmed) — rotate
         doRotate(d.name)
       } else {
         doDrop(clientX,clientY,d)
@@ -401,7 +413,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       window.removeEventListener('touchmove',onMove)
       window.removeEventListener('touchend',onUp)
     }
-  },[]) // bind once — doPreview/doDrop/doRotate use functional setPlaced or refs only
+  },[]) // bind once
 
   const randomize=()=>{ setPlaced(randomPlacement()) }
   const reset=()=>{ setPlaced([]) }
@@ -462,8 +474,15 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                     if(isPlaced) return
                     e.preventDefault()
                     const t=e.touches[0]
-                    drag.current={name:ship.name,len:ship.len,h:true,offR:0,offC:0}
-                    setGhost({x:t.clientX,y:t.clientY,name:ship.name,len:ship.len,h:true})
+                    drag.current={name:ship.name,len:ship.len,h:true,offR:0,offC:0,pending:true,touch:true,startX:t.clientX,startY:t.clientY}
+                    setHolding(true)
+                    holdTimer.current=setTimeout(()=>{
+                      holdTimer.current=null
+                      setHolding(false)
+                      if(!drag.current||!drag.current.pending) return
+                      drag.current={...drag.current,pending:false}
+                      setGhost({x:t.clientX,y:t.clientY,name:ship.name,len:ship.len,h:true})
+                    },800)
                   }}
                   style={{cursor:isPlaced?'default':'grab',display:'inline-block',width:ship.len*cs,height:cs,flexShrink:0,outline:isPlaced?'none':'2px dashed var(--border-2)',borderRadius:3,filter:isPlaced?'grayscale(1)':'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'none'}}
                 >
@@ -523,7 +542,19 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const rawC=Math.floor((t.clientX-rect.left)/cs)
                       const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
-                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:t.clientX,startY:t.clientY}
+                      // Set pending drag with touch=true — hold timer will confirm after 1s
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,touch:true,startX:t.clientX,startY:t.clientY}
+                      setHolding(true)
+                      holdTimer.current=setTimeout(()=>{
+                        holdTimer.current=null
+                        setHolding(false)
+                        if(!drag.current||!drag.current.pending) return
+                        // Hold confirmed — activate drag
+                        drag.current={...drag.current,pending:false}
+                        setPlaced(prev=>prev.filter(s=>s.name!==ship.name))
+                        setGhost({x:t.clientX,y:t.clientY,name:ship.name,len:ship.len,h:ship.horiz})
+                        doPreview(t.clientX,t.clientY,drag.current)
+                      },800)
                     }}
                     style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none',WebkitUserSelect:'none'}}
                   >
@@ -913,7 +944,7 @@ export function Battleship() {
   )
 
   if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
-    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 60px',gap:10,...ns}}>
+    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
         <span style={{fontWeight:800,fontSize:16}}>Place Your Ships</span>
