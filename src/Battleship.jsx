@@ -324,7 +324,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   const doPreview = (clientX, clientY, ds) => {
     const pos=snapPos(clientX,clientY,ds)
     if (!pos) { setPreview(null); return }
-    const {r0f=pos.r0,c0f=pos.c0}={r0f:pos.r0,c0f:pos.c0}
+    const r0f=pos.r0, c0f=pos.c0
     const cells=shipCells(r0f,c0f,ds.len,ds.h)
     const cur=placedRef.current
     const grid=buildGrid(cur.filter(s=>s.name!==ds.name))
