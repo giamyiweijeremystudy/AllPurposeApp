@@ -636,6 +636,9 @@ export function Battleship() {
   const [oEnemyShell,setOEnemyShell]=useState(null)
   const [oMyShell,setOMyShell]=useState(null)
   const [selectedCell,setSelectedCell]=useState(null)
+  const [kickedMsg,setKickedMsg]=useState(null)
+  const [lobbyPopup,setLobbyPopup]=useState(null)
+  const [guestProfile,setGuestProfile]=useState(null)
   const pendingORef = useRef(null)
   const myShipsRef = useRef([])
   const oppShotsRef = useRef([])
@@ -746,56 +749,120 @@ export function Battleship() {
 
   // ── Online ────────────────────────────────────────────────
   const loadLobbies=async()=>{
-    const{data}=await supabase.from('battleship_lobbies').select('*,host:profiles!battleship_lobbies_host_id_fkey(username)').eq('status','waiting').order('created_at',{ascending:false})
+    const{data}=await supabase.from('battleship_lobbies')
+      .select('*,host:profiles!battleship_lobbies_host_id_fkey(username)')
+      .in('status',['waiting','full'])
+      .order('created_at',{ascending:false})
     setLobbies(data||[])
   }
+
   const createLobby=async()=>{
     if(!user) return
     const code=makeCode()
     const{data}=await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting'}).select().single()
-    setLobby(data)
+    setLobby(data); lobbyRef.current=data
     await supabase.from('battleship_players').insert({lobby_id:data.id,user_id:user.id,ships:[],shots:[],ready:false})
-    setOnlinePhase('placing'); subscribeToLobby(data.id)
+    setOnlinePhase('waiting_lobby')
+    subscribeToLobby(data.id)
   }
+
+  const leaveLobby=async()=>{
+    if(!lobbyRef.current||!user) return
+    const lb=lobbyRef.current
+    const isHost=lb.host_id===user.id
+    if(isHost){
+      // Host leaves — delete lobby, this kicks guest via realtime
+      await supabase.from('battleship_lobbies').update({status:'closed'}).eq('id',lb.id)
+      await supabase.from('battleship_players').delete().eq('lobby_id',lb.id)
+      await supabase.from('battleship_lobbies').delete().eq('id',lb.id)
+    } else {
+      // Guest leaves
+      await supabase.from('battleship_players').delete().eq('lobby_id',lb.id).eq('user_id',user.id)
+      await supabase.from('battleship_lobbies').update({guest_id:null,status:'waiting'}).eq('id',lb.id)
+    }
+    subRef.current?.unsubscribe()
+    setLobby(null); lobbyRef.current=null
+    setGuestProfile(null); setOpponentReady(false)
+    setOnlinePhase('lobby'); loadLobbies()
+  }
+
   const joinLobby=async(lobbyId)=>{
     if(!user) return; setJoinError('')
-    const{data:lb}=await supabase.from('battleship_lobbies').select('*').eq('id',lobbyId).single()
-    if(!lb||lb.status!=='waiting'){ setJoinError('Lobby not available'); return }
+    const{data:lb,error}=await supabase.from('battleship_lobbies').select('*').eq('id',lobbyId).single()
+    if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
+    if(lb.status==='closed'||lb.status==='finished'){ setLobbyPopup('This lobby no longer exists.'); return }
+    if(lb.status!=='waiting'){ setJoinError('Lobby is full or in progress'); return }
     if(lb.host_id===user.id){ setJoinError("That's your own lobby!"); return }
-    await supabase.from('battleship_lobbies').update({guest_id:user.id,status:'placing'}).eq('id',lobbyId)
+    await supabase.from('battleship_lobbies').update({guest_id:user.id,status:'full'}).eq('id',lobbyId)
     await supabase.from('battleship_players').insert({lobby_id:lobbyId,user_id:user.id,ships:[],shots:[],ready:false})
-    setLobby({...lb,guest_id:user.id,status:'placing'}); setOnlinePhase('placing')
+    const updated={...lb,guest_id:user.id,status:'full'}
+    setLobby(updated); lobbyRef.current=updated
+    setOnlinePhase('waiting_lobby')
     supabase.from('profiles').select('*').eq('id',lb.host_id).single().then(({data})=>setOpponentProfile(data))
     subscribeToLobby(lobbyId)
   }
+
   const joinByCode=async()=>{
-    const{data}=await supabase.from('battleship_lobbies').select('*').eq('code',joinCode.toUpperCase()).single()
-    if(!data){ setJoinError('Lobby not found'); return }
+    const{data,error}=await supabase.from('battleship_lobbies').select('*').eq('code',joinCode.toUpperCase()).single()
+    if(error||!data){ setJoinError('Lobby not found'); return }
     await joinLobby(data.id)
   }
+
+  const startGame=async()=>{
+    if(!lobbyRef.current) return
+    await supabase.from('battleship_lobbies').update({status:'placing'}).eq('id',lobbyRef.current.id)
+    setOnlinePhase('placing')
+  }
+
   const subscribeToLobby=(lobbyId)=>{
     if(subRef.current) subRef.current.unsubscribe()
     subRef.current=supabase.channel(`bs:${lobbyId}`)
-      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},p=>setLobby(p.new))
-      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>handleOnlineUpdate(p.new))
+      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},p=>{
+        const updated=p.new
+        setLobby(updated); lobbyRef.current=updated
+        // Guest kicked: host deleted lobby (status=closed or row deleted)
+        if(!updated||updated.status==='closed'){
+          const hostName=opponentProfile?.username||'Host'
+          setKickedMsg(`${hostName} has closed the lobby.`)
+          subRef.current?.unsubscribe()
+          setLobby(null); lobbyRef.current=null
+          setOnlinePhase('lobby'); loadLobbies()
+        }
+        // Both ready to place ships
+        if(updated.status==='placing') setOnlinePhase('placing')
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
+        const row=p.new
+        if(!row) return
+        if(row.user_id!==user?.id){
+          // Opponent joined or updated
+          setOpponentReady(row.ready)
+          supabase.from('profiles').select('*').eq('id',row.user_id).single()
+            .then(({data})=>{ if(data){ setOpponentProfile(data); setGuestProfile(data) } })
+          // Opponent ready in waiting_lobby
+          const newOppShots=row.shots||[]
+          if(newOppShots.length>oppShotsRef.current.length){
+            const latest=newOppShots[newOppShots.length-1]
+            showBanner(setOBanner,'Enemy has fired!','enemy_firing',SHELL_MS+600)
+            pendingORef.current={type:'incoming',cell:latest}
+            setOMyShell({sx:(latest[1]+0.5)*csRef.current,sy:-csRef.current,dx:(latest[1]+0.5)*csRef.current,dy:(latest[0]+0.5)*csRef.current})
+            setOppShots(newOppShots); oppShotsRef.current=newOppShots
+          } else {
+            setOppShots(newOppShots); oppShotsRef.current=newOppShots
+          }
+        }
+      })
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},()=>{
+        const hostName=opponentProfile?.username||'Host'
+        setKickedMsg(`${hostName} has closed the lobby.`)
+        subRef.current?.unsubscribe()
+        setLobby(null); lobbyRef.current=null
+        setOnlinePhase('lobby'); loadLobbies()
+      })
       .subscribe()
   }
-  const handleOnlineUpdate=useCallback((row)=>{
-    if(!user||row.user_id===user.id) return
-    setOpponentReady(row.ready)
-    const newOppShots=row.shots||[]
-    if(newOppShots.length>oppShotsRef.current.length){
-      const latest=newOppShots[newOppShots.length-1]
-      const oppName=row.username||'Opponent'
-      showBanner(setOBanner,'Enemy has fired!','enemy_firing',SHELL_MS+600)
-      pendingORef.current={type:'incoming',cell:latest}
-      setOMyShell({sx:(latest[1]+0.5)*csRef.current,sy:-csRef.current,dx:(latest[1]+0.5)*csRef.current,dy:(latest[0]+0.5)*csRef.current})
-      setOppShots(newOppShots); oppShotsRef.current=newOppShots
-    } else {
-      setOppShots(newOppShots); oppShotsRef.current=newOppShots
-    }
-    supabase.from('profiles').select('*').eq('id',row.user_id).single().then(({data})=>{if(data)setOpponentProfile(data)})
-  },[user])
+  // handleOnlineUpdate now inlined in subscribeToLobby
+  const handleOnlineUpdate=useCallback((_row)=>{},[])
 
   const onOMyShellLanded=()=>{
     setOMyShell(null)
@@ -823,11 +890,13 @@ export function Battleship() {
     if(rows&&rows.every(r=>r.ready)){
       await supabase.from('battleship_lobbies').update({status:'playing'}).eq('id',lobbyRef.current.id)
       setOnlineTurn(lobbyRef.current.host_id); setOnlinePhase('playing')
-    } else setOnlinePhase('waiting_opponent')
+    } else {
+      setOnlinePhase('waiting_ship_placement')
+    }
   }
 
   useEffect(()=>{
-    if(onlinePhase==='waiting_opponent'&&opponentReady&&lobbyRef.current){
+    if(onlinePhase==='waiting_ship_placement'&&opponentReady&&lobbyRef.current){
       supabase.from('battleship_players').select('*').eq('lobby_id',lobbyRef.current.id).then(({data})=>{
         if(data&&data.every(r=>r.ready)){
           supabase.from('battleship_lobbies').update({status:'playing'}).eq('id',lobbyRef.current.id)
@@ -869,7 +938,7 @@ export function Battleship() {
     const newlySunk=checked.find(s=>s.sunk&&!prev.find(q=>q.name===s.name)?.sunk)
     if(newlySunk){ setOEnemySink(newlySunk); setTimeout(()=>setOEnemySink(null),2200); showBanner(setOBanner,`🔥 You sunk their ${newlySunk.name}!`,'sunk',2500) }
     else showBanner(setOBanner,hit?'💥 HIT!':'💦 MISS',hit?'hit':'miss')
-    if(allSunk(checked)){ setOnlineWinner(user.id); await supabase.from('battleship_lobbies').update({status:'finished'}).eq('id',lobbyRef.current.id); setOnlinePhase('over') }
+    if(allSunk(checked)){ setOnlineWinner(user.id); await supabase.from('battleship_lobbies').update({status:'full'}).eq('id',lobbyRef.current.id); setOnlinePhase('over') }
   }
 
   useEffect(()=>{ if(mode==='online'&&onlinePhase==='lobby') loadLobbies() },[mode,onlinePhase])
@@ -882,8 +951,19 @@ export function Battleship() {
     setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
     setOnlineTurn(null); setOnlineWinner(null); setJoinCode(''); setJoinError('')
     setSelectedCell(null); setBanner(null); setOBanner(null)
+    setKickedMsg(null); setLobbyPopup(null); setGuestProfile(null)
     pendingShotRef.current=null; pendingORef.current=null
     subRef.current?.unsubscribe()
+  }
+
+  const backToWaitingLobby=()=>{
+    // After game: reset game state, go back to waiting lobby
+    setMyShots([]); myShotsRef.current=[]
+    setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
+    setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
+    setOBanner(null); setOpponentReady(false)
+    pendingORef.current=null
+    setOnlinePhase('waiting_lobby')
   }
 
   const isMyTurn=onlineTurn===user?.id
@@ -901,11 +981,29 @@ export function Battleship() {
 
   if(mode==='online'&&onlinePhase==='lobby') return (
     <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',padding:16,...ns}}>
+      {/* Popups */}
+      {kickedMsg&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:320,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+            <div style={{fontSize:18,fontWeight:700,color:'var(--danger)'}}>Lobby Closed</div>
+            <div style={{fontSize:14,color:'var(--text-2)'}}>{kickedMsg}</div>
+            <button onClick={()=>setKickedMsg(null)} style={{padding:'10px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>OK</button>
+          </div>
+        </div>
+      )}
+      {lobbyPopup&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:320,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+            <div style={{fontSize:14,color:'var(--text-2)'}}>{lobbyPopup}</div>
+            <button onClick={()=>{ setLobbyPopup(null); loadLobbies() }} style={{padding:'10px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>OK</button>
+          </div>
+        </div>
+      )}
       <div style={{maxWidth:500,margin:'0 auto'}}>
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
           <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Back</button>
           <span style={{fontWeight:800,fontSize:18}}>Online Lobbies</span>
-          <button onClick={loadLobbies} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',padding:'4px 10px',color:'var(--text-2)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>↻</button>
+          <button onClick={loadLobbies} style={{marginLeft:'auto',background:'none',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',padding:'4px 10px',color:'var(--text-2)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>↻ Refresh</button>
         </div>
         <button onClick={createLobby} style={{width:'100%',padding:'12px',background:'var(--accent)',border:'none',borderRadius:'var(--radius-lg)',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:16}}>+ Create Lobby</button>
         <div style={{display:'flex',gap:8,marginBottom:20}}>
@@ -915,20 +1013,82 @@ export function Battleship() {
         {joinError&&<div style={{color:'var(--danger)',fontSize:12,marginBottom:12}}>{joinError}</div>}
         <div style={{fontWeight:700,fontSize:11,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Open Lobbies</div>
         {lobbies.length===0?<div style={{textAlign:'center',color:'var(--text-3)',fontSize:13,padding:24}}>No open lobbies — create one!</div>
-          :lobbies.map(lb=>(
-            <div key={lb.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:'var(--radius)',marginBottom:8}}>
-              <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13}}>{lb.host?.username||'Unknown'}'s game</div><div style={{fontSize:11,color:'var(--text-3)'}}>Code: {lb.code}</div></div>
-              <button onClick={()=>joinLobby(lb.id)} style={{padding:'7px 16px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Join</button>
-            </div>
-          ))
+          :lobbies.map(lb=>{
+            const isFull=lb.status==='full'||lb.status==='playing'||lb.status==='placing'
+            return (
+              <div key={lb.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:'var(--radius)',marginBottom:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:13}}>{lb.host?.username||'Unknown'}'s game</div>
+                  <div style={{fontSize:11,color:'var(--text-3)'}}>Code: {lb.code}</div>
+                </div>
+                {isFull
+                  ? <div style={{padding:'7px 16px',background:'var(--bg-3)',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',color:'var(--text-3)',fontSize:12,fontWeight:600}}>FULL</div>
+                  : <button onClick={()=>joinLobby(lb.id)} style={{padding:'7px 16px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Join</button>
+                }
+              </div>
+            )
+          })
         }
       </div>
     </div>
   )
 
-  if(mode==='online'&&onlinePhase==='waiting_opponent') return (
+  // ── Waiting lobby (host and guest both wait here) ──────────────
+  if(mode==='online'&&onlinePhase==='waiting_lobby') {
+    const isHost=lobby?.host_id===user?.id
+    const hostName=isHost?(profile?.username||'You'):(opponentProfile?.username||'Host')
+    const guestName=isHost?(guestProfile?.username||null):(profile?.username||'You')
+    const bothReady=isHost?!!guestProfile:true // host waits for guest; guest is always "in"
+    return (
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,background:'var(--bg)',padding:24,...ns}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:32,marginBottom:8}}>🚢</div>
+          <div style={{fontWeight:800,fontSize:20}}>Lobby</div>
+          {lobby&&<div style={{fontSize:13,color:'var(--text-3)',marginTop:4}}>Code: <strong style={{color:'var(--accent)',letterSpacing:'0.12em',fontSize:15}}>{lobby.code}</strong></div>}
+        </div>
+
+        {/* Player slots */}
+        <div style={{width:'100%',maxWidth:340,display:'flex',flexDirection:'column',gap:10}}>
+          {/* Host slot */}
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:'var(--radius)'}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600}}>{hostName}</div>
+              <div style={{fontSize:11,color:'var(--text-3)'}}>Host</div>
+            </div>
+            <div style={{fontSize:11,color:'#22c55e',fontWeight:600}}>✓ Ready</div>
+          </div>
+          {/* Guest slot */}
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'var(--bg-2)',border:`1px solid ${guestName?'var(--border)':'var(--border-2)'}`,borderRadius:'var(--radius)',opacity:guestName?1:0.5}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:guestName?'#22c55e':'var(--border-2)',flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600}}>{guestName||'Waiting for player…'}</div>
+              <div style={{fontSize:11,color:'var(--text-3)'}}>Guest</div>
+            </div>
+            {guestName&&<div style={{fontSize:11,color:'#22c55e',fontWeight:600}}>✓ Ready</div>}
+          </div>
+        </div>
+
+        {isHost&&!guestName&&<div style={{fontSize:12,color:'var(--text-3)',textAlign:'center'}}>Share the code above with a friend</div>}
+
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={leaveLobby} style={{padding:'10px 20px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
+            {isHost?'Close Lobby':'Leave Lobby'}
+          </button>
+          {isHost&&guestName&&(
+            <button onClick={startGame} style={{padding:'10px 24px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              Start Game →
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if(mode==='online'&&onlinePhase==='waiting_ship_placement') return (
     <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,background:'var(--bg)',...ns}}>
-      <div style={{fontSize:36}}>⏳</div><div style={{fontWeight:700,fontSize:18}}>Waiting for opponent…</div>
+      <div style={{fontSize:36}}>⏳</div>
+      <div style={{fontWeight:700,fontSize:18}}>Waiting for opponent to place ships…</div>
       {lobby&&<div style={{fontSize:13,color:'var(--text-3)'}}>Code: <strong style={{color:'var(--accent)',letterSpacing:'0.1em'}}>{lobby.code}</strong></div>}
     </div>
   )
@@ -954,6 +1114,7 @@ export function Battleship() {
         <div style={{display:'flex',gap:12}}>
           <button onClick={resetAll} style={{padding:'10px 24px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text)',fontSize:14,cursor:'pointer',fontFamily:'inherit'}}>Menu</button>
           {mode==='ai'&&<button onClick={startAI} style={{padding:'10px 24px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Play again</button>}
+          {mode==='online'&&<button onClick={backToWaitingLobby} style={{padding:'10px 24px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Back to Lobby</button>}
         </div>
       </div>
     )
