@@ -363,6 +363,12 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
 
   // Single global listener — registered once, uses refs/functional updates only
   useEffect(()=>{
+    // Prevent page scroll only during active drag (after threshold crossed)
+    const preventScroll=(e)=>{
+      if(drag.current && !drag.current.pending) e.preventDefault()
+    }
+    document.addEventListener('touchmove',preventScroll,{passive:false})
+
     const onMove=(e)=>{
       if(!drag.current) return
       e.cancelable && e.preventDefault()
@@ -415,6 +421,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       window.removeEventListener('mouseup',onUp)
       window.removeEventListener('touchmove',onMove,opts)
       window.removeEventListener('touchend',onUp)
+      document.removeEventListener('touchmove',preventScroll)
     }
   },[])
 
@@ -441,7 +448,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
   })():null
 
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%',touchAction:'none'}}>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%'}}>
       {GhostShip}
       {opponentUsername&&(
         <div style={{background:'#166534',border:'1px solid #22c55e',borderRadius:'var(--radius)',padding:'8px 16px',color:'#86efac',fontSize:13,fontWeight:600,textAlign:'center',width:'100%',maxWidth:550}}>
@@ -927,7 +934,7 @@ export function Battleship() {
   )
 
   if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
-    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,touchAction:'none',...ns}}>
+    <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
         <span style={{fontWeight:800,fontSize:16}}>Place Your Ships</span>
