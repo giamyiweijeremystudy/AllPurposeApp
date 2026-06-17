@@ -368,9 +368,11 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
       const {clientX,clientY}=e.touches?e.touches[0]:e
       const d=drag.current
       if (d.pending){
-        if (Math.hypot(clientX-d.startX,clientY-d.startY)<10) return
+        // Show ghost immediately so user sees ship following finger
+        setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
+        if (Math.hypot(clientX-d.startX,clientY-d.startY)<20) return
+        // Threshold crossed — confirm drag, remove from board
         drag.current={...d,pending:false}
-        // Remove from placed — safe because doDrop uses functional update
         setPlaced(prev=>prev.filter(s=>s.name!==d.name))
       }
       setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
@@ -504,7 +506,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                 const [r0,c0]=ship.cells[0]
                 return (
                   <div key={ship.name}
-                    onPointerDown={e=>{
+                    onMouseDown={e=>{
                       e.preventDefault()
                       const rect=gridRef.current.getBoundingClientRect()
                       const rawR=Math.floor((e.clientY-rect.top)/cs)
@@ -513,7 +515,17 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
                       drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:e.clientX,startY:e.clientY}
                     }}
-                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none'}}
+                    onTouchStart={e=>{
+                      e.preventDefault()
+                      const t=e.touches[0]
+                      const rect=gridRef.current.getBoundingClientRect()
+                      const rawR=Math.floor((t.clientY-rect.top)/cs)
+                      const rawC=Math.floor((t.clientX-rect.left)/cs)
+                      const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
+                      const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
+                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:t.clientX,startY:t.clientY}
+                    }}
+                    style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none',WebkitUserSelect:'none'}}
                   >
                     <ShipModel name={ship.name} len={ship.len} horiz={ship.horiz} cs={cs} sunk={false} hit={false}/>
 
@@ -547,7 +559,7 @@ function ShipHealth({ships,shots,label}) {
 }
 
 // ── Main ──────────────────────────────────────────────────────
-export function Battleship() {
+export function Battleship({active=true}) {
   const [screen,setScreen]=useState('menu')
   const [mode,setMode]=useState(null)
   const [user,setUser]=useState(null)
@@ -625,14 +637,16 @@ export function Battleship() {
 
   const ns={userSelect:'none',WebkitUserSelect:'none'}
 
-  // Remove .content padding to let game fill edge-to-edge
+  // Remove .content padding when game is the active view
+  // We receive `active` prop from App — only apply when truly visible
   useEffect(()=>{
+    if(!active) return
     const el=document.querySelector('.content')
     if(!el) return
     const oldP=el.style.padding, oldO=el.style.overflowY
     el.style.padding='0'; el.style.overflowY='hidden'
     return()=>{ el.style.padding=oldP; el.style.overflowY=oldO }
-  },[])
+  },[active])
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
