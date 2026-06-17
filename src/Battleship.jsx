@@ -447,7 +447,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           <div style={{fontSize:10,fontWeight:700,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Fleet</div>
           {SHIPS.map(ship=>{
-            const isPlaced=placedSet.has(ship.name), h=horiz[ship.name]
+            const isPlaced=placedSet.has(ship.name)
             return (
               <div key={ship.name} style={{display:'flex',alignItems:'center',gap:8,opacity:isPlaced?0.35:1}}>
                 <div style={{fontSize:10,color:'var(--text-3)',width:70,flexShrink:0}}>{ship.name} ({ship.len})</div>
