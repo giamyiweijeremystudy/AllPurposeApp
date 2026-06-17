@@ -310,7 +310,7 @@ export default function App() {
             visibility: activeNavItem?.label === 'Battleship' ? 'visible' : 'hidden',
             pointerEvents: activeNavItem?.label === 'Battleship' ? 'auto' : 'none',
           }}>
-            <Battleship />
+            <Battleship active={activeNavItem?.label === 'Battleship'}/>
           </div>
         )}
       </main>
