@@ -183,27 +183,11 @@ export const PAGE_COLORS = {
   'ti-home':     '#0284c7',
   'ti-mail':     '#2563eb',
   'ti-database': '#dc2626',
-  'ti-layout-grid': (
-    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="8" y="8" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="8" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="18" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="28" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="28" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="38" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="28" y="18" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="18" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="28" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="28" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="38" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
-    </svg>
-  ),
-  'ti-stack': '#94a3b8',
   'ti-layout-grid': '#06b6d4',
+  'ti-stack':    '#94a3b8',
   'ti-letter-w': '#538d4e',
   'ti-device-gamepad': '#16a34a',
-  'ti-anchor': '#1d4ed8',
+  'ti-anchor':   '#1d4ed8',
   'default':     '#6b7280',
 }
 
@@ -217,27 +201,11 @@ export const PAGE_BG = {
   'ti-home':     '#e0f2fe',
   'ti-mail':     '#dbeafe',
   'ti-database': '#fef2f2',
-  'ti-layout-grid': (
-    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="8" y="8" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="8" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="18" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="28" y="20" width="10" height="10" rx="2" fill="#06b6d4"/>
-      <rect x="28" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="38" y="8" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="28" y="18" width="10" height="10" rx="2" fill="#a855f7"/>
-      <rect x="18" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="28" y="32" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="28" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="38" y="42" width="10" height="10" rx="2" fill="#22c55e"/>
-      <rect x="8" y="44" width="48" height="10" rx="2" fill="#ef444466"/>
-    </svg>
-  ),
-  'ti-stack': '#f8fafc',
   'ti-layout-grid': '#ecfeff',
+  'ti-stack':    '#f8fafc',
   'ti-letter-w': '#f0fdf4',
   'ti-device-gamepad': '#f0fdf4',
-  'ti-anchor': '#eff6ff',
+  'ti-anchor':   '#eff6ff',
   'default':     '#f9fafb',
 }
 
