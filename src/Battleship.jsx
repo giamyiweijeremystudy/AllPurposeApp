@@ -639,6 +639,9 @@ export function Battleship() {
   const [kickedMsg,setKickedMsg]=useState(null)
   const [lobbyPopup,setLobbyPopup]=useState(null)
   const [guestProfile,setGuestProfile]=useState(null)
+  const [countdown,setCountdown]=useState(null) // 3,2,1 during pre-game countdown
+  const [concedePopup,setConcedePopup]=useState(false)
+  const countdownTimerRef = useRef(null)
   const pendingORef = useRef(null)
   const myShipsRef = useRef([])
   const oppShotsRef = useRef([])
@@ -759,30 +762,36 @@ export function Battleship() {
   const createLobby=async()=>{
     if(!user) return
     const code=makeCode()
-    const{data}=await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting'}).select().single()
+    const{data}=await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting',host_ready:false,guest_ready:false}).select().single()
     setLobby(data); lobbyRef.current=data
     await supabase.from('battleship_players').insert({lobby_id:data.id,user_id:user.id,ships:[],shots:[],ready:false})
     setOnlinePhase('waiting_lobby')
     subscribeToLobby(data.id)
   }
 
+  const cancelCountdown=async(lb)=>{
+    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
+    setCountdown(null)
+    await supabase.from('battleship_lobbies').update({countdown_start:null}).eq('id',lb.id)
+  }
+
   const leaveLobby=async()=>{
     if(!lobbyRef.current||!user) return
     const lb=lobbyRef.current
     const isHost=lb.host_id===user.id
+    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
     if(isHost){
-      // Host leaves — delete lobby, this kicks guest via realtime
-      await supabase.from('battleship_lobbies').update({status:'closed'}).eq('id',lb.id)
+      // Host leaves — delete lobby entirely, this kicks guest via realtime DELETE event
       await supabase.from('battleship_players').delete().eq('lobby_id',lb.id)
       await supabase.from('battleship_lobbies').delete().eq('id',lb.id)
     } else {
-      // Guest leaves
+      // Guest leaves — remove guest, reopen lobby for new joiners
       await supabase.from('battleship_players').delete().eq('lobby_id',lb.id).eq('user_id',user.id)
-      await supabase.from('battleship_lobbies').update({guest_id:null,status:'waiting'}).eq('id',lb.id)
+      await supabase.from('battleship_lobbies').update({guest_id:null,status:'waiting',guest_ready:false,host_ready:false,countdown_start:null}).eq('id',lb.id)
     }
     subRef.current?.unsubscribe()
     setLobby(null); lobbyRef.current=null
-    setGuestProfile(null); setOpponentReady(false)
+    setGuestProfile(null); setOpponentReady(false); setCountdown(null)
     setOnlinePhase('lobby'); loadLobbies()
   }
 
@@ -790,12 +799,12 @@ export function Battleship() {
     if(!user) return; setJoinError('')
     const{data:lb,error}=await supabase.from('battleship_lobbies').select('*').eq('id',lobbyId).single()
     if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
-    if(lb.status==='closed'||lb.status==='finished'){ setLobbyPopup('This lobby no longer exists.'); return }
-    if(lb.status!=='waiting'){ setJoinError('Lobby is full or in progress'); return }
+    if(lb.status!=='waiting'){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.host_id===user.id){ setJoinError("That's your own lobby!"); return }
-    await supabase.from('battleship_lobbies').update({guest_id:user.id,status:'full'}).eq('id',lobbyId)
+    const{data:updated,error:updErr}=await supabase.from('battleship_lobbies')
+      .update({guest_id:user.id,status:'full'}).eq('id',lobbyId).eq('status','waiting').select().single()
+    if(updErr||!updated){ setLobbyPopup('This lobby was just filled by someone else.'); return }
     await supabase.from('battleship_players').insert({lobby_id:lobbyId,user_id:user.id,ships:[],shots:[],ready:false})
-    const updated={...lb,guest_id:user.id,status:'full'}
     setLobby(updated); lobbyRef.current=updated
     setOnlinePhase('waiting_lobby')
     supabase.from('profiles').select('*').eq('id',lb.host_id).single().then(({data})=>setOpponentProfile(data))
@@ -808,38 +817,76 @@ export function Battleship() {
     await joinLobby(data.id)
   }
 
-  const startGame=async()=>{
-    if(!lobbyRef.current) return
-    await supabase.from('battleship_lobbies').update({status:'placing'}).eq('id',lobbyRef.current.id)
-    setOnlinePhase('placing')
+  // Toggle ready in the waiting lobby. When BOTH become ready, start a 3s countdown.
+  // If either un-readies during the countdown, it's cancelled.
+  const toggleReady=async()=>{
+    if(!lobbyRef.current||!user) return
+    const lb=lobbyRef.current
+    const isHost=lb.host_id===user.id
+    const myField=isHost?'host_ready':'guest_ready'
+    const newVal=!lb[myField]
+    const{data:updated}=await supabase.from('battleship_lobbies').update({[myField]:newVal,countdown_start:null}).eq('id',lb.id).select().single()
+    if(updated){ setLobby(updated); lobbyRef.current=updated }
+    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
+    // If both now ready, host initiates the countdown (only host writes countdown_start to avoid races)
+    if(newVal && updated && updated.host_ready && updated.guest_ready && isHost){
+      await supabase.from('battleship_lobbies').update({countdown_start:new Date().toISOString()}).eq('id',lb.id)
+    }
+  }
+
+  const runCountdownFrom=(startIso)=>{
+    if(countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+    const tick=()=>{
+      const elapsed=(Date.now()-new Date(startIso).getTime())/1000
+      const remaining=Math.ceil(3-elapsed)
+      if(remaining<=0){
+        clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
+        setCountdown(null)
+        if(lobbyRef.current?.host_id===user?.id){
+          supabase.from('battleship_lobbies').update({status:'placing',countdown_start:null}).eq('id',lobbyRef.current.id)
+        }
+        return
+      }
+      setCountdown(remaining)
+    }
+    tick()
+    countdownTimerRef.current=setInterval(tick,200)
   }
 
   const subscribeToLobby=(lobbyId)=>{
     if(subRef.current) subRef.current.unsubscribe()
     subRef.current=supabase.channel(`bs:${lobbyId}`)
-      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},p=>{
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},p=>{
         const updated=p.new
         setLobby(updated); lobbyRef.current=updated
-        // Guest kicked: host deleted lobby (status=closed or row deleted)
-        if(!updated||updated.status==='closed'){
-          const hostName=opponentProfile?.username||'Host'
-          setKickedMsg(`${hostName} has closed the lobby.`)
-          subRef.current?.unsubscribe()
-          setLobby(null); lobbyRef.current=null
-          setOnlinePhase('lobby'); loadLobbies()
+        if(updated.guest_id) {
+          supabase.from('profiles').select('*').eq('id',updated.guest_id).single()
+            .then(({data})=>{ if(data){ setGuestProfile(data); if(updated.host_id!==user?.id) setOpponentProfile(data) } })
+        } else {
+          setGuestProfile(null)
         }
-        // Both ready to place ships
-        if(updated.status==='placing') setOnlinePhase('placing')
+        if(updated.status==='placing'){
+          if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
+          setCountdown(null)
+          setOnlinePhase('placing')
+        } else if(updated.countdown_start){
+          runCountdownFrom(updated.countdown_start)
+        } else if(!updated.countdown_start && countdownTimerRef.current){
+          clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
+          setCountdown(null)
+        }
       })
-      .on('postgres_changes',{event:'*',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
+        const row=p.new
+        if(!row||row.user_id===user?.id) return
+        supabase.from('profiles').select('*').eq('id',row.user_id).single()
+          .then(({data})=>{ if(data){ setOpponentProfile(data); setGuestProfile(data) } })
+      })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'battleship_players',filter:`lobby_id=eq.${lobbyId}`},p=>{
         const row=p.new
         if(!row) return
         if(row.user_id!==user?.id){
-          // Opponent joined or updated
           setOpponentReady(row.ready)
-          supabase.from('profiles').select('*').eq('id',row.user_id).single()
-            .then(({data})=>{ if(data){ setOpponentProfile(data); setGuestProfile(data) } })
-          // Opponent ready in waiting_lobby
           const newOppShots=row.shots||[]
           if(newOppShots.length>oppShotsRef.current.length){
             const latest=newOppShots[newOppShots.length-1]
@@ -853,7 +900,9 @@ export function Battleship() {
         }
       })
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'battleship_lobbies',filter:`id=eq.${lobbyId}`},()=>{
-        const hostName=opponentProfile?.username||'Host'
+        const hostName=opponentProfile?.username||guestProfile?.username||'Host'
+        if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
+        setCountdown(null)
         setKickedMsg(`${hostName} has closed the lobby.`)
         subRef.current?.unsubscribe()
         setLobby(null); lobbyRef.current=null
@@ -861,7 +910,6 @@ export function Battleship() {
       })
       .subscribe()
   }
-  // handleOnlineUpdate now inlined in subscribeToLobby
   const handleOnlineUpdate=useCallback((_row)=>{},[])
 
   const onOMyShellLanded=()=>{
@@ -945,15 +993,38 @@ export function Battleship() {
   useEffect(()=>()=>subRef.current?.unsubscribe(),[])
 
   const resetAll=()=>{
+    // Clean up any lobby we're currently in so it doesn't linger in the browser
+    if(mode==='online' && lobbyRef.current && user){
+      const lb=lobbyRef.current
+      if(lb.host_id===user.id){
+        supabase.from('battleship_players').delete().eq('lobby_id',lb.id).then(()=>{})
+        supabase.from('battleship_lobbies').delete().eq('id',lb.id).then(()=>{})
+      } else {
+        supabase.from('battleship_players').delete().eq('lobby_id',lb.id).eq('user_id',user.id).then(()=>{})
+        supabase.from('battleship_lobbies').update({guest_id:null,status:'waiting',guest_ready:false,host_ready:false,countdown_start:null}).eq('id',lb.id).then(()=>{})
+      }
+    }
+    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
     setScreen('menu'); setMode(null); setPhase('placing')
     setOnlinePhase('lobby'); setLobby(null); lobbyRef.current=null
     setOpponentReady(false); setMyShots([]); myShotsRef.current=[]
     setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
     setOnlineTurn(null); setOnlineWinner(null); setJoinCode(''); setJoinError('')
     setSelectedCell(null); setBanner(null); setOBanner(null)
-    setKickedMsg(null); setLobbyPopup(null); setGuestProfile(null)
+    setKickedMsg(null); setLobbyPopup(null); setGuestProfile(null); setCountdown(null)
+    setConcedePopup(false)
     pendingShotRef.current=null; pendingORef.current=null
     subRef.current?.unsubscribe()
+  }
+
+  const concedeGame=async()=>{
+    setConcedePopup(false)
+    if(mode==='ai'){ setWinner('ai'); setPhase('over'); return }
+    if(mode==='online'&&lobbyRef.current){
+      setOnlineWinner('opponent')
+      await supabase.from('battleship_lobbies').update({status:'full'}).eq('id',lobbyRef.current.id)
+      setOnlinePhase('over')
+    }
   }
 
   const backToWaitingLobby=()=>{
@@ -1033,14 +1104,23 @@ export function Battleship() {
     </div>
   )
 
-  // ── Waiting lobby (host and guest both wait here) ──────────────
+  // ── Waiting lobby (host and guest both wait here, ready up, countdown) ──
   if(mode==='online'&&onlinePhase==='waiting_lobby') {
     const isHost=lobby?.host_id===user?.id
     const hostName=isHost?(profile?.username||'You'):(opponentProfile?.username||'Host')
-    const guestName=isHost?(guestProfile?.username||null):(profile?.username||'You')
-    const bothReady=isHost?!!guestProfile:true // host waits for guest; guest is always "in"
+    const guestName=lobby?.guest_id ? (isHost?(guestProfile?.username||'Guest'):(profile?.username||'You')) : null
+    const hostReady=!!lobby?.host_ready
+    const guestReady=!!lobby?.guest_ready
+    const myReady=isHost?hostReady:guestReady
     return (
       <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,background:'var(--bg)',padding:24,...ns}}>
+        {countdown!==null&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:998,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+            <div style={{fontSize:13,color:'var(--text-3)',fontWeight:600,letterSpacing:'0.08em'}}>GAME STARTING IN</div>
+            <div style={{fontSize:72,fontWeight:800,color:'var(--accent)'}}>{countdown}</div>
+            <div style={{fontSize:12,color:'var(--text-3)'}}>Click Unready to cancel</div>
+          </div>
+        )}
         <div style={{textAlign:'center'}}>
           <div style={{fontSize:32,marginBottom:8}}>🚢</div>
           <div style={{fontWeight:800,fontSize:20}}>Lobby</div>
@@ -1049,35 +1129,33 @@ export function Battleship() {
 
         {/* Player slots */}
         <div style={{width:'100%',maxWidth:340,display:'flex',flexDirection:'column',gap:10}}>
-          {/* Host slot */}
           <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:'var(--radius)'}}>
-            <div style={{width:10,height:10,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/>
+            <div style={{width:10,height:10,borderRadius:'50%',background:hostReady?'#22c55e':'var(--border-2)',flexShrink:0,transition:'background 0.2s'}}/>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:600}}>{hostName}</div>
               <div style={{fontSize:11,color:'var(--text-3)'}}>Host</div>
             </div>
-            <div style={{fontSize:11,color:'#22c55e',fontWeight:600}}>✓ Ready</div>
+            <div style={{fontSize:11,color:hostReady?'#22c55e':'var(--text-3)',fontWeight:600}}>{hostReady?'✓ Ready':'Not ready'}</div>
           </div>
-          {/* Guest slot */}
           <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'var(--bg-2)',border:`1px solid ${guestName?'var(--border)':'var(--border-2)'}`,borderRadius:'var(--radius)',opacity:guestName?1:0.5}}>
-            <div style={{width:10,height:10,borderRadius:'50%',background:guestName?'#22c55e':'var(--border-2)',flexShrink:0}}/>
+            <div style={{width:10,height:10,borderRadius:'50%',background:guestReady?'#22c55e':'var(--border-2)',flexShrink:0,transition:'background 0.2s'}}/>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:600}}>{guestName||'Waiting for player…'}</div>
               <div style={{fontSize:11,color:'var(--text-3)'}}>Guest</div>
             </div>
-            {guestName&&<div style={{fontSize:11,color:'#22c55e',fontWeight:600}}>✓ Ready</div>}
+            {guestName&&<div style={{fontSize:11,color:guestReady?'#22c55e':'var(--text-3)',fontWeight:600}}>{guestReady?'✓ Ready':'Not ready'}</div>}
           </div>
         </div>
 
-        {isHost&&!guestName&&<div style={{fontSize:12,color:'var(--text-3)',textAlign:'center'}}>Share the code above with a friend</div>}
+        {!guestName&&<div style={{fontSize:12,color:'var(--text-3)',textAlign:'center'}}>Share the code above with a friend</div>}
 
         <div style={{display:'flex',gap:10}}>
           <button onClick={leaveLobby} style={{padding:'10px 20px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
             {isHost?'Close Lobby':'Leave Lobby'}
           </button>
-          {isHost&&guestName&&(
-            <button onClick={startGame} style={{padding:'10px 24px',background:'var(--accent)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
-              Start Game →
+          {guestName&&(
+            <button onClick={toggleReady} style={{padding:'10px 24px',background:myReady?'var(--bg-3)':'var(--accent)',border:myReady?'1px solid var(--border-2)':'none',borderRadius:'var(--radius)',color:myReady?'var(--text)':'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              {myReady?'Unready':'Ready'}
             </button>
           )}
         </div>
@@ -1127,9 +1205,21 @@ export function Battleship() {
     const pGrid=<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{fontSize:10,fontWeight:700,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Your Fleet</div><BattleGrid ships={updP} shots={aiShots} showShips={true} cs={cs} disabled={true} firingShip={playerFiring} impact={playerImpact} sinkShip={playerSink} shell={playerShell} onLand={()=>setPlayerShell(null)}/></div>
     if(isMobile) return (
       <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflowY:'auto',WebkitOverflowScrolling:'touch',...ns}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}><button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button><span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span></div>
+        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}><button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button><span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span><button onClick={()=>setConcedePopup(true)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Concede</button></div>
         <div style={{padding:'0 6px',width:'100%',flexShrink:0}}><Banner event={banner}/></div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12,padding:'8px 0 20px'}}>{eGrid}{pGrid}</div>
+        {concedePopup&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:300,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{fontSize:15,fontWeight:700}}>Concede this game?</div>
+              <div style={{fontSize:13,color:'var(--text-2)'}}>You will lose immediately.</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>setConcedePopup(false)} style={{padding:'8px 16px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={concedeGame} style={{padding:'8px 16px',background:'var(--danger)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Concede</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
     return (
@@ -1137,11 +1227,24 @@ export function Battleship() {
         {eGrid}
         <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:140}}>
           <button onClick={resetAll} style={{padding:'6px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>← Menu</button>
+          <button onClick={()=>setConcedePopup(true)} style={{padding:'6px',border:'1px solid var(--danger)',borderRadius:'var(--radius)',background:'transparent',color:'var(--danger)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Concede</button>
           <Banner event={banner}/>
           <ShipHealth ships={updAI} shots={playerShots} label="ENEMY FLEET"/>
           <ShipHealth ships={updP} shots={aiShots} label="YOUR FLEET"/>
         </div>
         {pGrid}
+        {concedePopup&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:300,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{fontSize:15,fontWeight:700}}>Concede this game?</div>
+              <div style={{fontSize:13,color:'var(--text-2)'}}>You will lose immediately.</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>setConcedePopup(false)} style={{padding:'8px 16px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={concedeGame} style={{padding:'8px 16px',background:'var(--danger)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Concede</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1153,9 +1256,21 @@ export function Battleship() {
     const mGrid=<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{fontSize:10,fontWeight:700,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Your Fleet</div><BattleGrid ships={myC} shots={oppShots} showShips={true} cs={cs} disabled={true} impact={oMyImpact} sinkShip={oMySink} shell={oMyShell} onLand={onOMyShellLanded}/></div>
     if(isMobile) return (
       <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflowY:'auto',WebkitOverflowScrolling:'touch',...ns}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}><button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button><span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span></div>
+        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}><button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button><span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span><button onClick={()=>setConcedePopup(true)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Concede</button></div>
         <div style={{padding:'0 6px',width:'100%',flexShrink:0}}><Banner event={oBanner}/></div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12,padding:'8px 0 20px'}}>{eGrid}{isMyTurn&&fireBtn}{mGrid}</div>
+        {concedePopup&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:300,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{fontSize:15,fontWeight:700}}>Concede this game?</div>
+              <div style={{fontSize:13,color:'var(--text-2)'}}>You will lose immediately.</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>setConcedePopup(false)} style={{padding:'8px 16px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={concedeGame} style={{padding:'8px 16px',background:'var(--danger)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Concede</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
     return (
@@ -1163,12 +1278,25 @@ export function Battleship() {
         {eGrid}
         <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:150,alignItems:'center'}}>
           <button onClick={resetAll} style={{width:'100%',padding:'6px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>← Menu</button>
+          <button onClick={()=>setConcedePopup(true)} style={{padding:'6px',border:'1px solid var(--danger)',borderRadius:'var(--radius)',background:'transparent',color:'var(--danger)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Concede</button>
           <Banner event={oBanner}/>
           {fireBtn}
           <ShipHealth ships={myC} shots={oppShots} label="YOUR FLEET"/>
           {lobby&&<div style={{fontSize:10,color:'var(--text-3)',textAlign:'center'}}>Code: <strong>{lobby.code}</strong></div>}
         </div>
         {mGrid}
+        {concedePopup&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border-2)',borderRadius:'var(--radius-lg)',padding:24,maxWidth:300,textAlign:'center',display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{fontSize:15,fontWeight:700}}>Concede this game?</div>
+              <div style={{fontSize:13,color:'var(--text-2)'}}>You will lose immediately.</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>setConcedePopup(false)} style={{padding:'8px 16px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={concedeGame} style={{padding:'8px 16px',background:'var(--danger)',border:'none',borderRadius:'var(--radius)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Concede</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
