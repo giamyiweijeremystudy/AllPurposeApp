@@ -288,18 +288,20 @@ function BattleGrid({ships,shots,onShot,showShips,cs,disabled,firingShip,impact,
 
 // ── Placement board ───────────────────────────────────────────
 function PlacementBoard({onDone, cs, opponentUsername}) {
-  const [placed, setPlaced] = useState([])       // ships on grid
-  const [horiz,  setHoriz]  = useState(          // orientation per ship
-    () => Object.fromEntries(SHIPS.map(s=>[s.name,true])))
+  const [placed, setPlaced] = useState([])
+  // placed ref — always current, safe to read in event handlers without closures  
+  const placedRef = useRef([])
+  useEffect(()=>{ placedRef.current=placed },[placed])
 
-  // Drag state — stored in a ref to avoid stale closures in event listeners
-  const drag = useRef(null) // {name,len,h,offR,offC} while dragging
-  const [ghost, setGhost] = useState(null) // {x,y,name,len,h} — floating preview
-  const [preview, setPreview] = useState(null) // {cells,valid}
+  const drag    = useRef(null)
   const gridRef = useRef(null)
+  const [ghost,   setGhost]   = useState(null)
+  const [preview, setPreview] = useState(null)
 
   const placedSet = new Set(placed.map(s=>s.name))
   const allPlaced = placed.length === SHIPS.length
+
+  // Always reads from gridRef — no closure issues
   const getGridCell = (cx, cy) => {
     const el=gridRef.current; if(!el) return null
     const rect=el.getBoundingClientRect()
@@ -308,133 +310,118 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
     return [r,c]
   }
 
-  const computePreview = (clientX, clientY, ds) => {
+  // Compute snap position from cursor + drag descriptor — pure function, no closure
+  const snapPos = (clientX, clientY, ds) => {
     const raw=getGridCell(clientX,clientY)
-    if (!raw) { setPreview(null); return }
-    const [r,c]=raw
-    const r0=ds.h?r:r-ds.offR, c0=ds.h?c-ds.offC:c
-    // Clamp so ship fits on grid
-    const r0f=ds.h ? Math.max(0,Math.min(r0,SIZE-1))   : Math.max(0,Math.min(r0,SIZE-ds.len))
-    const c0f=ds.h ? Math.max(0,Math.min(c0,SIZE-ds.len)) : Math.max(0,Math.min(c0,SIZE-1))
-    const cells=shipCells(r0f,c0f,ds.len,ds.h)
-    const grid=buildGrid(placed.filter(s=>s.name!==ds.name))
-    const valid=canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)
-    setPreview({cells, valid, r0:r0f, c0:c0f})
-  }
-
-  const commitDrop = (clientX, clientY, ds) => {
-    const raw=getGridCell(clientX,clientY)
-    if (!raw) return
+    if (!raw) return null
     const [r,c]=raw
     const r0=ds.h?r:r-ds.offR, c0=ds.h?c-ds.offC:c
     const r0f=ds.h ? Math.max(0,Math.min(r0,SIZE-1))      : Math.max(0,Math.min(r0,SIZE-ds.len))
     const c0f=ds.h ? Math.max(0,Math.min(c0,SIZE-ds.len)) : Math.max(0,Math.min(c0,SIZE-1))
-    const grid=buildGrid(placed.filter(s=>s.name!==ds.name))
-    if (!canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)) return
-    const cells=shipCells(r0f,c0f,ds.len,ds.h)
-    setPlaced(prev=>[...prev.filter(s=>s.name!==ds.name),{name:ds.name,len:ds.len,cells,horiz:ds.h,sunk:false}])
-    // horiz state stays true (horizontal) for bank display regardless of grid orientation
+    return {r0:r0f, c0:c0f}
   }
 
-  // Use functional setPlaced so rotateOnBoard never needs stale placed closure
-  const rotateOnBoard = (name) => {
-    setPlaced(prev => {
+  const doPreview = (clientX, clientY, ds) => {
+    const pos=snapPos(clientX,clientY,ds)
+    if (!pos) { setPreview(null); return }
+    const {r0f=pos.r0,c0f=pos.c0}={r0f:pos.r0,c0f:pos.c0}
+    const cells=shipCells(r0f,c0f,ds.len,ds.h)
+    const cur=placedRef.current
+    const grid=buildGrid(cur.filter(s=>s.name!==ds.name))
+    const valid=canPlace(grid,ds.name,r0f,c0f,ds.len,ds.h)
+    setPreview({cells,valid,r0:r0f,c0:c0f})
+  }
+
+  const doDrop = (clientX, clientY, ds) => {
+    const pos=snapPos(clientX,clientY,ds)
+    if (!pos) return
+    const {r0,c0}=pos
+    // Use setPlaced functional update — reads latest placed, no closure needed
+    setPlaced(prev=>{
+      const grid=buildGrid(prev.filter(s=>s.name!==ds.name))
+      if (!canPlace(grid,ds.name,r0,c0,ds.len,ds.h)) return prev
+      const cells=shipCells(r0,c0,ds.len,ds.h)
+      return [...prev.filter(s=>s.name!==ds.name),{name:ds.name,len:ds.len,cells,horiz:ds.h,sunk:false}]
+    })
+  }
+
+  const doRotate = (name) => {
+    setPlaced(prev=>{
       const ship=prev.find(s=>s.name===name)
       if (!ship) return prev
       const newH=!ship.horiz
       const [r0,c0]=ship.cells[0]
-      const nr=newH ? Math.min(r0,SIZE-1) : Math.min(r0,SIZE-ship.len)
-      const nc=newH ? Math.min(c0,SIZE-ship.len) : Math.min(c0,SIZE-1)
+      const nr=newH?Math.min(r0,SIZE-1):Math.min(r0,SIZE-ship.len)
+      const nc=newH?Math.min(c0,SIZE-ship.len):Math.min(c0,SIZE-1)
       const grid=buildGrid(prev.filter(s=>s.name!==name))
       if (!canPlace(grid,name,nr,nc,ship.len,newH)) return prev
       const cells=shipCells(nr,nc,ship.len,newH)
       return [...prev.filter(s=>s.name!==name),{...ship,cells,horiz:newH}]
     })
   }
-  const rotateRef = useRef(rotateOnBoard)
-  useEffect(()=>{ rotateRef.current=rotateOnBoard },[placed])
 
-  // Keep refs to latest computePreview and commitDrop so global listeners never go stale
-  const computePreviewRef = useRef(computePreview)
-  const commitDropRef = useRef(commitDrop)
-  useEffect(()=>{ computePreviewRef.current=computePreview; commitDropRef.current=commitDrop },[placed,cs])
-
-  // Global pointer listeners — registered ONCE, never re-bound
-  useEffect(() => {
-    const onMove = (e) => {
+  // Single global listener, registered once — all logic via refs/functional updates
+  useEffect(()=>{
+    const onMove=(e)=>{
       if (!drag.current) return
       e.cancelable && e.preventDefault()
       const {clientX,clientY}=e.touches?e.touches[0]:e
       const d=drag.current
-      if (d.pending) {
-        if (Math.hypot(clientX-d.startX, clientY-d.startY) < 10) return
-        drag.current={...d, pending:false}
+      if (d.pending){
+        if (Math.hypot(clientX-d.startX,clientY-d.startY)<10) return
+        drag.current={...d,pending:false}
+        // Remove from placed — safe because doDrop uses functional update
         setPlaced(prev=>prev.filter(s=>s.name!==d.name))
       }
-      setGhost({x:clientX, y:clientY, name:drag.current.name, len:drag.current.len, h:drag.current.h})
-      computePreviewRef.current(clientX, clientY, drag.current)
+      setGhost({x:clientX,y:clientY,name:d.name,len:d.len,h:d.h})
+      doPreview(clientX,clientY,drag.current)
     }
-    const onUp = (e) => {
+    const onUp=(e)=>{
       if (!drag.current) return
       const {clientX,clientY}=e.changedTouches?e.changedTouches[0]:e
       const d=drag.current
       drag.current=null
-      if (d.pending) {
-        rotateRef.current(d.name)
-        return
-      }
-      commitDropRef.current(clientX, clientY, d)
       setGhost(null)
       setPreview(null)
+      if (d.pending){
+        doRotate(d.name)
+      } else {
+        doDrop(clientX,clientY,d)
+      }
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    window.addEventListener('touchmove', onMove, {passive:false})
-    window.addEventListener('touchend', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
+    window.addEventListener('mousemove',onMove)
+    window.addEventListener('mouseup',onUp)
+    window.addEventListener('touchmove',onMove,{passive:false})
+    window.addEventListener('touchend',onUp)
+    return()=>{
+      window.removeEventListener('mousemove',onMove)
+      window.removeEventListener('mouseup',onUp)
+      window.removeEventListener('touchmove',onMove)
+      window.removeEventListener('touchend',onUp)
     }
-  }, []) // empty deps — bind once, use refs for fresh values
+  },[]) // bind once — doPreview/doDrop/doRotate use functional setPlaced or refs only
 
-  const startDrag = (e, name, len, h, offR=0, offC=0) => {
-    e.preventDefault()
-    drag.current = {name,len,h,offR,offC}
-    const {clientX,clientY}=e.touches?e.touches[0]:e
-    setGhost({x:clientX,y:clientY,name,len,h})
-  }
+  const randomize=()=>{ setPlaced(randomPlacement()) }
+  const reset=()=>{ setPlaced([]) }
 
-  const randomize = () => {
-    const p=randomPlacement()
-    setPlaced(p)
-    // horiz stays all-true so bank shows horizontal
-  }
-  const reset = () => { setPlaced([]); setHoriz(Object.fromEntries(SHIPS.map(s=>[s.name,true]))) }
-
-  // Ghost ship following cursor — snap to grid cell so it aligns with preview
-  const GhostShip = ghost ? (() => {
+  // Ghost snaps to preview grid position
+  const GhostShip = ghost?(() => {
     const el=gridRef.current
     const w=ghost.h?ghost.len*cs:cs, h=ghost.h?cs:ghost.len*cs
-    // If we have a preview cell, snap ghost to that grid position
-    if (el && preview) {
+    if (el && preview){
       const rect=el.getBoundingClientRect()
-      const snapX=rect.left + preview.c0*cs
-      const snapY=rect.top  + preview.r0*cs
       return (
-        <div style={{position:'fixed',left:snapX,top:snapY,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.75}}>
+        <div style={{position:'fixed',left:rect.left+preview.c0*cs,top:rect.top+preview.r0*cs,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.8}}>
           <ShipModel name={ghost.name} len={ghost.len} horiz={ghost.h} cs={cs} sunk={false} hit={false}/>
         </div>
       )
     }
-    // Fallback: center on cursor
     return (
-      <div style={{position:'fixed',left:ghost.x-w/2,top:ghost.y-h/2,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.75}}>
+      <div style={{position:'fixed',left:ghost.x-w/2,top:ghost.y-h/2,width:w,height:h,pointerEvents:'none',zIndex:9999,opacity:0.8}}>
         <ShipModel name={ghost.name} len={ghost.len} horiz={ghost.h} cs={cs} sunk={false} hit={false}/>
       </div>
     )
-  })() : null
+  })():null
 
   return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,width:'100%'}}>
@@ -463,11 +450,22 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
               <div key={ship.name} style={{display:'flex',alignItems:'center',gap:8,opacity:isPlaced?0.35:1}}>
                 <div style={{fontSize:10,color:'var(--text-3)',width:70,flexShrink:0}}>{ship.name} ({ship.len})</div>
                 <div
-                  onMouseDown={e=>{ if(isPlaced) return; startDrag(e,ship.name,ship.len,h) }}
-                  onTouchStart={e=>{ if(isPlaced) return; startDrag(e,ship.name,ship.len,h) }}
-                  style={{cursor:isPlaced?'default':'grab',display:'inline-block',width:h?ship.len*cs:cs,height:h?cs:ship.len*cs,flexShrink:0,outline:isPlaced?'none':'2px dashed var(--border-2)',borderRadius:3,filter:isPlaced?'grayscale(1)':'none',WebkitUserSelect:'none',userSelect:'none'}}
+                  onMouseDown={e=>{
+                    if(isPlaced) return
+                    e.preventDefault()
+                    drag.current={name:ship.name,len:ship.len,h:true,offR:0,offC:0}
+                    setGhost({x:e.clientX,y:e.clientY,name:ship.name,len:ship.len,h:true})
+                  }}
+                  onTouchStart={e=>{
+                    if(isPlaced) return
+                    e.preventDefault()
+                    const t=e.touches[0]
+                    drag.current={name:ship.name,len:ship.len,h:true,offR:0,offC:0}
+                    setGhost({x:t.clientX,y:t.clientY,name:ship.name,len:ship.len,h:true})
+                  }}
+                  style={{cursor:isPlaced?'default':'grab',display:'inline-block',width:ship.len*cs,height:cs,flexShrink:0,outline:isPlaced?'none':'2px dashed var(--border-2)',borderRadius:3,filter:isPlaced?'grayscale(1)':'none',WebkitUserSelect:'none',userSelect:'none',touchAction:'none'}}
                 >
-                  <ShipModel name={ship.name} len={ship.len} horiz={h} cs={cs} sunk={false} hit={false}/>
+                  <ShipModel name={ship.name} len={ship.len} horiz={true} cs={cs} sunk={false} hit={false}/>
                 </div>
                 <span style={{fontSize:9,color:isPlaced?'#22c55e':'var(--text-3)'}}>{isPlaced?'✓ placed':'drag →'}</span>
               </div>
@@ -506,7 +504,7 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                 const [r0,c0]=ship.cells[0]
                 return (
                   <div key={ship.name}
-                    onMouseDown={e=>{
+                    onPointerDown={e=>{
                       e.preventDefault()
                       const rect=gridRef.current.getBoundingClientRect()
                       const rawR=Math.floor((e.clientY-rect.top)/cs)
@@ -514,16 +512,6 @@ function PlacementBoard({onDone, cs, opponentUsername}) {
                       const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
                       const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
                       drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:e.clientX,startY:e.clientY}
-                    }}
-                    onTouchStart={e=>{
-                      e.preventDefault()
-                      const t=e.touches[0]
-                      const rect=gridRef.current.getBoundingClientRect()
-                      const rawR=Math.floor((t.clientY-rect.top)/cs)
-                      const rawC=Math.floor((t.clientX-rect.left)/cs)
-                      const offR=ship.horiz?0:Math.min(Math.max(0,rawR-r0),ship.len-1)
-                      const offC=ship.horiz?Math.min(Math.max(0,rawC-c0),ship.len-1):0
-                      drag.current={name:ship.name,len:ship.len,h:ship.horiz,offR,offC,pending:true,startX:t.clientX,startY:t.clientY}
                     }}
                     style={{position:'absolute',top:r0*cs,left:c0*cs,width:ship.horiz?ship.len*cs:cs,height:ship.horiz?cs:ship.len*cs,cursor:'grab',zIndex:5,touchAction:'none'}}
                   >
