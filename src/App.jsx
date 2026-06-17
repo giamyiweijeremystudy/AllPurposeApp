@@ -290,7 +290,11 @@ export default function App() {
         )}
 
         {/* Content */}
-        <div className="content">
+        <div className="content" style={
+          ['Snake','Battleship'].includes(activeNavItem?.label)
+            ? {padding:0, overflow:'hidden'}
+            : undefined
+        }>
           {renderContent()}
           {/* Persistent game mounts inside content — inset:0 fills content area only */}
           {navItems.some(i => i.label === 'Snake') && (
