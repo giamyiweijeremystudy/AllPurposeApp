@@ -954,6 +954,40 @@ export function Battleship() {
     }
   },[opponentReady,onlinePhase])
 
+  // Polling fallback for waiting_lobby — guarantees guest-join and countdown/placing
+  // transition are picked up even if a realtime event is dropped.
+  useEffect(()=>{
+    if(mode!=='online'||onlinePhase!=='waiting_lobby'||!lobbyRef.current) return
+    const poll=async()=>{
+      const{data}=await supabase.from('battleship_lobbies').select('*').eq('id',lobbyRef.current.id).single()
+      if(!data){
+        const hostName=opponentProfile?.username||guestProfile?.username||'Host'
+        setKickedMsg(`${hostName} has closed the lobby.`)
+        setLobby(null); lobbyRef.current=null; setOnlinePhase('lobby'); loadLobbies()
+        return
+      }
+      const prev=lobbyRef.current
+      setLobby(data); lobbyRef.current=data
+      if(data.guest_id && data.guest_id!==prev?.guest_id){
+        supabase.from('profiles').select('*').eq('id',data.guest_id).single()
+          .then(({data:p})=>{ if(p){ setGuestProfile(p); if(data.host_id!==user?.id) setOpponentProfile(p) } })
+      }
+      if(!data.guest_id) setGuestProfile(null)
+      if(data.status==='placing'){
+        if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
+        setCountdown(null)
+        setOnlinePhase('placing')
+      } else if(data.countdown_start){
+        runCountdownFrom(data.countdown_start)
+      } else if(!data.countdown_start && countdownTimerRef.current){
+        clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
+        setCountdown(null)
+      }
+    }
+    const interval=setInterval(poll,1200)
+    return ()=>clearInterval(interval)
+  },[mode,onlinePhase])
+
   const handleCellSelect=(r,c)=>{
     if(onlineTurn!==user?.id||onlineWinner) return
     if(myShotsRef.current.some(([sr,sc])=>sr===r&&sc===c)) return
@@ -1114,17 +1148,15 @@ export function Battleship() {
     const myReady=isHost?hostReady:guestReady
     return (
       <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,background:'var(--bg)',padding:24,...ns}}>
-        {countdown!==null&&(
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:998,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
-            <div style={{fontSize:13,color:'var(--text-3)',fontWeight:600,letterSpacing:'0.08em'}}>GAME STARTING IN</div>
-            <div style={{fontSize:72,fontWeight:800,color:'var(--accent)'}}>{countdown}</div>
-            <div style={{fontSize:12,color:'var(--text-3)'}}>Click Unready to cancel</div>
-          </div>
-        )}
         <div style={{textAlign:'center'}}>
           <div style={{fontSize:32,marginBottom:8}}>🚢</div>
           <div style={{fontWeight:800,fontSize:20}}>Lobby</div>
           {lobby&&<div style={{fontSize:13,color:'var(--text-3)',marginTop:4}}>Code: <strong style={{color:'var(--accent)',letterSpacing:'0.12em',fontSize:15}}>{lobby.code}</strong></div>}
+          {countdown!==null&&(
+            <div style={{marginTop:10,fontSize:13,color:'var(--accent)',fontWeight:700}}>
+              Starting in {countdown}… <span style={{color:'var(--text-3)',fontWeight:500}}>(click Unready to cancel)</span>
+            </div>
+          )}
         </div>
 
         {/* Player slots */}
