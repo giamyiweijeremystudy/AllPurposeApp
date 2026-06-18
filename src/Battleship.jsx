@@ -763,7 +763,7 @@ export function Battleship() {
       .select('*,host:profiles!battleship_lobbies_host_id_fkey(username)')
       .eq('status','waiting')
       .order('created_at',{ascending:false})
-    setLobbies(data||[])
+    setLobbies((data||[]).filter(lb=>lb.host_id!==userRef.current?.id))
   }
 
   // Apply a presence snapshot (object keyed by presence ref -> array of metas)
@@ -880,7 +880,9 @@ export function Battleship() {
     if(!user) return; setJoinError('')
     const{data:lb,error}=await supabase.from('battleship_lobbies').select('*').eq('code',code).single()
     if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
+    if(lb.status!=='waiting'){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.host_id===user.id){ setJoinError("That's your own lobby!"); return }
+    await supabase.from('battleship_lobbies').update({status:'full'}).eq('code',code).eq('status','waiting')
     setLobbyCode(code); lobbyCodeRef.current=code
     setIsHost(false); isHostRef.current=false
     setHostReady(false); setGuestReady(false)
@@ -899,6 +901,8 @@ export function Battleship() {
     if(isHostRef.current && code){
       channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
       await supabase.from('battleship_lobbies').delete().eq('code',code)
+    } else if(code){
+      await supabase.from('battleship_lobbies').update({status:'waiting'}).eq('code',code)
     }
     teardownChannel()
     setLobbyCode(null); lobbyCodeRef.current=null
