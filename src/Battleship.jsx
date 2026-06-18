@@ -760,10 +760,17 @@ export function Battleship() {
   // ── Online: lobby browser (Postgres table, just for discovery) ──
   const loadLobbies=async()=>{
     const{data}=await supabase.from('battleship_lobbies')
-      .select('*,host:profiles!battleship_lobbies_host_id_fkey(username)')
+      .select('*')
       .eq('status','waiting')
       .order('created_at',{ascending:false})
-    setLobbies((data||[]).filter(lb=>lb.host_id!==userRef.current?.id))
+    const filtered=(data||[]).filter(lb=>lb.host_id!==userRef.current?.id)
+    if(filtered.length){
+      const hostIds=[...new Set(filtered.map(lb=>lb.host_id))]
+      const{data:hosts}=await supabase.from('profiles').select('id,username').in('id',hostIds)
+      const byId=Object.fromEntries((hosts||[]).map(h=>[h.id,h]))
+      filtered.forEach(lb=>{ lb.host=byId[lb.host_id]||null })
+    }
+    setLobbies(filtered)
   }
 
   // Apply a presence snapshot (object keyed by presence ref -> array of metas)
@@ -899,7 +906,7 @@ export function Battleship() {
   const leaveLobby=async()=>{
     const code=lobbyCodeRef.current
     if(isHostRef.current && code){
-      channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
+      await channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
       await supabase.from('battleship_lobbies').delete().eq('code',code)
     } else if(code){
       await supabase.from('battleship_lobbies').update({status:'waiting'}).eq('code',code)
@@ -1057,11 +1064,19 @@ export function Battleship() {
   useEffect(()=>{ if(mode==='online'&&onlinePhase==='lobby') loadLobbies() },[mode,onlinePhase])
   useEffect(()=>()=>teardownChannel(),[])
 
-  const resetAll=()=>{
+  // If the profile finishes loading (or username changes) after we already
+  // tracked presence with a placeholder name, re-track with the real one.
+  useEffect(()=>{
+    if(channelRef.current && profile?.username && lobbyCodeRef.current){
+      channelRef.current.track({user_id:userRef.current?.id,username:profile.username,role:isHostRef.current?'host':'guest'})
+    }
+  },[profile?.username])
+
+  const resetAll=async()=>{
     if(mode==='online' && lobbyCodeRef.current){
       if(isHostRef.current){
-        channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
-        supabase.from('battleship_lobbies').delete().eq('code',lobbyCodeRef.current).then(()=>{})
+        await channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
+        await supabase.from('battleship_lobbies').delete().eq('code',lobbyCodeRef.current)
       }
       teardownChannel()
     }
