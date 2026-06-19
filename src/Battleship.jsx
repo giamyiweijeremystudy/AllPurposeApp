@@ -977,7 +977,7 @@ export function Battleship() {
   const countdownStartedRef = useRef(false) // guards against re-sending countdown_start repeatedly
 
   const checkBothReadyAndMaybeStart=async()=>{
-    if(hostReady && guestReady && hostPresence && guestPresence && isHostRef.current && !countdownStartedRef.current && countdown===null){
+    if(hostReady && guestReady && isHostRef.current && !countdownStartedRef.current && countdown===null){
       countdownStartedRef.current=true
       const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
       const startedAt=data||new Date().toISOString()
@@ -990,7 +990,7 @@ export function Battleship() {
   // Re-evaluate on every relevant state change, not just on the specific
   // event that happened to fire — this is what actually guarantees the
   // countdown starts regardless of timing/order of ready clicks and presence sync.
-  useEffect(()=>{ checkBothReadyAndMaybeStart() },[hostReady,guestReady,hostPresence,guestPresence])
+  useEffect(()=>{ checkBothReadyAndMaybeStart() },[hostReady,guestReady])
 
   const toggleReady=()=>{
     const role=isHostRef.current?'host':'guest'
@@ -1091,6 +1091,16 @@ export function Battleship() {
     const id=setInterval(loadLobbies,5000)
     return ()=>clearInterval(id)
   },[mode,onlinePhase])
+
+  // Safety net: re-check both-ready every 5s while in the waiting lobby,
+  // in case a presence/broadcast event was missed and the reactive
+  // useEffect never got a chance to re-fire.
+  useEffect(()=>{
+    if(!(mode==='online'&&onlinePhase==='waiting_lobby')) return
+    const id=setInterval(checkBothReadyAndMaybeStart,5000)
+    return ()=>clearInterval(id)
+  },[mode,onlinePhase])
+
   useEffect(()=>()=>teardownChannel(),[])
 
   // If the profile finishes loading (or username changes) after we already
