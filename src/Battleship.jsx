@@ -911,6 +911,7 @@ export function Battleship() {
 
   const createLobby=async()=>{
     if(!user) return
+    countdownStartedRef.current=false
     const code=makeCode()
     await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting',last_seen:new Date().toISOString()})
     setLobbyCode(code); lobbyCodeRef.current=code
@@ -933,6 +934,7 @@ export function Battleship() {
 
   const joinLobby=async(code)=>{
     if(!user) return; setJoinError('')
+    countdownStartedRef.current=false
     const{data:lb,error}=await supabase.from('battleship_lobbies').select('*').eq('code',code).single()
     if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.status!=='waiting'){ setLobbyPopup('This lobby no longer exists.'); return }
@@ -975,14 +977,23 @@ export function Battleship() {
   // opponent's broadcast) so the countdown reliably starts regardless of
   // who readied up last. Only the host actually sends the start signal,
   // to avoid both clients racing to send it.
+  const countdownStartedRef = useRef(false) // guards against re-sending countdown_start repeatedly
+
   const checkBothReadyAndMaybeStart=async()=>{
-    if(hostReadyRef.current && guestReadyRef.current && hostPresenceRef.current && guestPresenceRef.current && isHostRef.current){
+    if(hostReady && guestReady && hostPresence && guestPresence && isHostRef.current && !countdownStartedRef.current && countdown===null){
+      countdownStartedRef.current=true
       const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
       const startedAt=data||new Date().toISOString()
       channelRef.current?.send({type:'broadcast',event:'countdown_start',payload:{startedAt}})
       runCountdownFrom(startedAt)
     }
+    if((!hostReady||!guestReady)) countdownStartedRef.current=false
   }
+
+  // Re-evaluate on every relevant state change, not just on the specific
+  // event that happened to fire — this is what actually guarantees the
+  // countdown starts regardless of timing/order of ready clicks and presence sync.
+  useEffect(()=>{ checkBothReadyAndMaybeStart() },[hostReady,guestReady,hostPresence,guestPresence])
 
   const toggleReady=()=>{
     const role=isHostRef.current?'host':'guest'
