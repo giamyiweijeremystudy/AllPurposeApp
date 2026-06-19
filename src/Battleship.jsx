@@ -900,6 +900,9 @@ export function Battleship() {
 
     channel.subscribe(async(status)=>{
       if(status==='SUBSCRIBED'){
+        const t0=Date.now()
+        const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
+        if(data){ const serverMs=new Date(data).getTime(); const rtt=Date.now()-t0; clockOffsetRef.current=serverMs+rtt/2-Date.now() }
         await channel.track({user_id:userRef.current.id,username,role})
         resolve(channel)
       }
@@ -972,9 +975,10 @@ export function Battleship() {
   // opponent's broadcast) so the countdown reliably starts regardless of
   // who readied up last. Only the host actually sends the start signal,
   // to avoid both clients racing to send it.
-  const checkBothReadyAndMaybeStart=()=>{
+  const checkBothReadyAndMaybeStart=async()=>{
     if(hostReadyRef.current && guestReadyRef.current && hostPresenceRef.current && guestPresenceRef.current && isHostRef.current){
-      const startedAt=new Date().toISOString()
+      const{data}=await supabase.rpc('now_iso').single().catch(()=>({data:null}))
+      const startedAt=data||new Date().toISOString()
       channelRef.current?.send({type:'broadcast',event:'countdown_start',payload:{startedAt}})
       runCountdownFrom(startedAt)
     }
@@ -995,10 +999,13 @@ export function Battleship() {
     }
   }
 
+  const clockOffsetRef = useRef(0) // serverTime - clientTime, ms
+
   const runCountdownFrom=(startedAt)=>{
     if(countdownTimerRef.current) clearInterval(countdownTimerRef.current)
     const tick=()=>{
-      const elapsed=(Date.now()-new Date(startedAt).getTime())/1000
+      const nowServer=Date.now()+clockOffsetRef.current
+      const elapsed=(nowServer-new Date(startedAt).getTime())/1000
       const remaining=Math.ceil(3-elapsed)
       if(remaining<=0){
         clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
@@ -1249,7 +1256,7 @@ export function Battleship() {
     </div>
   )
 
-  if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing')) return (
+  if((mode==='ai'&&phase==='placing')||(mode==='online'&&onlinePhase==='placing'&&myShots.length===0&&oppShots.length===0)) return (
     <div style={{position:'absolute',inset:0,background:'var(--bg)',overflowY:'auto',WebkitOverflowScrolling:'touch',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 8px 100px',gap:10,...ns}}>
       <div style={{display:'flex',alignItems:'center',gap:12,width:'100%',maxWidth:750}}>
         <button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>← Menu</button>
