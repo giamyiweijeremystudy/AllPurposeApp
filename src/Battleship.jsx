@@ -779,148 +779,75 @@ export function Battleship() {
     setLobbies(filtered)
   }
 
-  // Apply a presence snapshot (object keyed by presence ref -> array of metas)
-  // to host/guest state. Each client tracks exactly one presence: {user_id,username,role}.
-  const applyPresenceState=(state)=>{
-    const metas=Object.values(state).flat()
-    const host=metas.find(m=>m.role==='host')||null
-    const guest=metas.find(m=>m.role==='guest')||null
-    setHostPresence(host)
-    setGuestPresence(guest)
-    if(userRef.current){
-      const isMeHost=host?.user_id===userRef.current.id
-      const opp=isMeHost?guest:host
-      setOpponentProfile(opp?{username:opp.username}:null)
+  // ── Online lobby — single Postgres row is the ONLY source of truth ──
+  // No presence, no broadcast for ready/countdown/start. Every client polls
+  // the same battleship_lobbies row every 1.5s while in the waiting lobby.
+  // Ready toggles, countdown, and game start are all just column writes —
+  // every client reading the same row sees the same state, period.
+
+  const lobbyRowRef = useRef(null) // latest fetched row, for stale-free reads in callbacks
+
+  const pollLobbyRow=async()=>{
+    const code=lobbyCodeRef.current
+    if(!code) return
+    const{data,error}=await supabase.from('battleship_lobbies').select('*').eq('code',code).single()
+    if(error||!data){
+      setKickedMsg('Host has closed the lobby.')
+      setLobbyCode(null); lobbyCodeRef.current=null
+      setOnlinePhase('lobby'); loadLobbies()
+      return
+    }
+    lobbyRowRef.current=data
+    setHostReady(!!data.host_ready)
+    setGuestReady(!!data.guest_ready)
+    if(data.guest_id && !guestPresenceRef.current){
+      const{data:p}=await supabase.from('profiles').select('username').eq('id',data.guest_id).single()
+      if(p){ guestPresenceRef.current={username:p.username}; setGuestPresence({username:p.username}); setOpponentProfile({username:p.username}) }
+    }
+    if(!data.guest_id){ guestPresenceRef.current=null; setGuestPresence(null) }
+    if(data.host_id && isHostRef.current===false && !hostPresenceRef.current){
+      const{data:p}=await supabase.from('profiles').select('username').eq('id',data.host_id).single()
+      if(p){ hostPresenceRef.current={username:p.username}; setHostPresence({username:p.username}); setOpponentProfile({username:p.username}) }
+    }
+    if(data.status==='placing'){
+      setOnlineTurn(data.host_id)
+      setOnlinePhase('placing')
+      return
+    }
+    if(data.countdown_started_at){
+      runCountdownFrom(data.countdown_started_at)
+    } else if(countdownTimerRef.current){
+      clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
+      setCountdown(null)
+    }
+    // Host: if both ready and no countdown yet, start one.
+    if(isHostRef.current && data.host_ready && data.guest_ready && !data.countdown_started_at){
+      const{data:srv}=await supabase.rpc('now_iso').catch(()=>({data:null}))
+      const startedAt=srv||new Date().toISOString()
+      await supabase.from('battleship_lobbies').update({countdown_started_at:startedAt}).eq('code',code)
+    }
+    // Host: countdown finished (checked via local clock against DB timestamp)
+    if(isHostRef.current && data.countdown_started_at && data.status==='full'){
+      const elapsed=(Date.now()-new Date(data.countdown_started_at).getTime())/1000
+      if(elapsed>=3){
+        await supabase.from('battleship_lobbies').update({status:'placing'}).eq('code',code)
+      }
     }
   }
 
-  const teardownChannel=()=>{
-    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
-    if(channelRef.current){ supabase.removeChannel(channelRef.current); channelRef.current=null }
-  }
-
-  // Build and subscribe to the single channel for this lobby. Presence tracks
-  // who's in the room; broadcast carries ready-toggles, countdown, game-start,
-  // and (during play) shots — all instant, no DB polling, no stale closures
-  // because every handler reads from refs / functional setState.
-  const joinChannel=(code,role,username)=>new Promise((resolve)=>{
-    teardownChannel()
-    const channel=supabase.channel(`lobby:${code}`,{config:{presence:{key:userRef.current.id}}})
-    channelRef.current=channel
-
-    channel.on('presence',{event:'sync'},()=>{
-      applyPresenceState(channel.presenceState())
-    })
-
-    channel.on('broadcast',{event:'ready'},({payload})=>{
-      if(payload.role==='host'){ setHostReady(payload.ready); hostReadyRef.current=payload.ready }
-      if(payload.role==='guest'){ setGuestReady(payload.ready); guestReadyRef.current=payload.ready }
-      if(!payload.ready){
-        if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
-        setCountdown(null)
-      }
-    })
-
-    channel.on('broadcast',{event:'countdown_start'},({payload})=>{
-      runCountdownFrom(payload.startedAt)
-    })
-
-    channel.on('broadcast',{event:'countdown_cancel'},()=>{
-      if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
-      setCountdown(null)
-    })
-
-    channel.on('broadcast',{event:'game_start'},({payload})=>{
-      if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
-      setCountdown(null)
-      setOnlineTurn(payload.firstTurnUserId)
-      setOnlinePhase('placing')
-    })
-
-    channel.on('broadcast',{event:'ships_ready'},({payload})=>{
-      if(payload.user_id===userRef.current?.id) return
-      setOpponentReady(true)
-    })
-
-    channel.on('broadcast',{event:'shot_result'},({payload})=>{
-      if(payload.to!==userRef.current?.id) return
-      setOEnemyImpact({cell:payload.cell,type:payload.hit?'explosion':'splash'}); clearAnim(setOEnemyImpact)
-      if(payload.sunkName){ showBanner(setOBanner,`🔥 You sunk their ${payload.sunkName}!`,'sunk',2500) }
-      else showBanner(setOBanner,payload.hit?'💥 HIT!':'💦 MISS',payload.hit?'hit':'miss')
-      if(payload.gameOver){ setOnlineWinner(userRef.current.id); setOnlinePhase('over') }
-    })
-
-    channel.on('broadcast',{event:'shot'},({payload})=>{
-      const{from,cell}=payload
-      const cur=myShipsRef.current
-      const hit=isHit(cur,cell[0],cell[1])
-      const updated=checkSunk(cur,[...oppShotsRef.current,cell])
-      const sunkShip=updated.find(s=>s.sunk&&isHit([s],cell[0],cell[1]))
-      channel.send({type:'broadcast',event:'shot_result',payload:{
-        to:from, cell, hit,
-        sunkName:sunkShip?sunkShip.name:null,
-        gameOver:allSunk(updated)
-      }})
-    })
-
-    channel.on('broadcast',{event:'shot'},({payload})=>{
-      if(payload.from===userRef.current?.id) return
-      const newOppShots=[...oppShotsRef.current,payload.cell]
-      showBanner(setOBanner,'Enemy has fired!','enemy_firing',SHELL_MS+600)
-      pendingORef.current={type:'incoming',cell:payload.cell}
-      setOMyShell({sx:(payload.cell[1]+0.5)*csRef.current,sy:-csRef.current,dx:(payload.cell[1]+0.5)*csRef.current,dy:(payload.cell[0]+0.5)*csRef.current})
-      setOppShots(newOppShots); oppShotsRef.current=newOppShots
-    })
-
-    channel.on('broadcast',{event:'concede'},({payload})=>{
-      if(payload.from===userRef.current?.id) return
-      setOnlineWinner(userRef.current?.id)
-      setOnlinePhase('over')
-    })
-
-    channel.on('broadcast',{event:'host_closed'},()=>{
-      if(isHostRef.current) return
-      setKickedMsg(`${hostPresence?.username||'Host'} has closed the lobby.`)
-      teardownChannel()
-      setOnlinePhase('lobby'); setLobbyCode(null); lobbyCodeRef.current=null
-      loadLobbies()
-    })
-
-    channel.on('broadcast',{event:'back_to_lobby'},()=>{
-      setMyShots([]); myShotsRef.current=[]
-      setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
-      setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
-      setOBanner(null); setOpponentReady(false); setHostReady(false); setGuestReady(false)
-      pendingORef.current=null
-      setOnlinePhase('waiting_lobby')
-    })
-
-    channel.subscribe(async(status)=>{
-      if(status==='SUBSCRIBED'){
-        await channel.track({user_id:userRef.current.id,username,role})
-        resolve(channel)
-        supabase.rpc('now_iso').then(({data})=>{
-          if(data){ const serverMs=new Date(data).getTime(); clockOffsetRef.current=serverMs-Date.now() }
-        }).catch(()=>{})
-      }
-    })
-  })
-
   const createLobby=async()=>{
     if(!user) return
-    countdownStartedRef.current=false
     const code=makeCode()
-    await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting',last_seen:new Date().toISOString()})
+    await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting',last_seen:new Date().toISOString(),host_ready:false,guest_ready:false,countdown_started_at:null})
     setLobbyCode(code); lobbyCodeRef.current=code
     setIsHost(true); isHostRef.current=true
     setHostReady(false); setGuestReady(false)
-    await joinChannel(code,'host',profile?.username||'Host')
+    setHostPresence({username:profile?.username||'Host'}); hostPresenceRef.current={username:profile?.username||'Host'}
     setOnlinePhase('waiting_lobby')
   }
 
   // Host heartbeat — keeps last_seen fresh while in the waiting lobby so the
-  // browser can tell abandoned lobbies (host closed tab without cleanup) from
-  // live ones, and delete the abandoned ones after 5s of silence.
+  // browser can tell abandoned lobbies from live ones.
   useEffect(()=>{
     if(!(mode==='online'&&onlinePhase==='waiting_lobby'&&isHost&&lobbyCode)) return
     const beat=()=>supabase.from('battleship_lobbies').update({last_seen:new Date().toISOString()}).eq('code',lobbyCode)
@@ -931,16 +858,14 @@ export function Battleship() {
 
   const joinLobby=async(code)=>{
     if(!user) return; setJoinError('')
-    countdownStartedRef.current=false
     const{data:lb,error}=await supabase.from('battleship_lobbies').select('*').eq('code',code).single()
     if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.status!=='waiting'){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.host_id===user.id){ setJoinError("That's your own lobby!"); return }
-    await supabase.from('battleship_lobbies').update({status:'full'}).eq('code',code).eq('status','waiting')
+    await supabase.from('battleship_lobbies').update({guest_id:user.id,status:'full',guest_ready:false}).eq('code',code).eq('status','waiting')
     setLobbyCode(code); lobbyCodeRef.current=code
     setIsHost(false); isHostRef.current=false
     setHostReady(false); setGuestReady(false)
-    await joinChannel(code,'guest',profile?.username||'Guest')
     setOnlinePhase('waiting_lobby')
   }
 
@@ -951,77 +876,51 @@ export function Battleship() {
   }
 
   const leaveLobby=async()=>{
+    teardownChannel()
     const code=lobbyCodeRef.current
     if(isHostRef.current && code){
-      await channelRef.current?.send({type:'broadcast',event:'host_closed',payload:{}})
       await supabase.from('battleship_lobbies').delete().eq('code',code)
     } else if(code){
-      await supabase.from('battleship_lobbies').update({status:'waiting'}).eq('code',code)
+      await supabase.from('battleship_lobbies').update({guest_id:null,status:'waiting',guest_ready:false,host_ready:false,countdown_started_at:null}).eq('code',code)
     }
-    teardownChannel()
     setLobbyCode(null); lobbyCodeRef.current=null
     setHostPresence(null); setGuestPresence(null); setOpponentProfile(null)
+    hostPresenceRef.current=null; guestPresenceRef.current=null
     setHostReady(false); setGuestReady(false); setCountdown(null)
     setOnlinePhase('lobby'); loadLobbies()
   }
 
-  const hostReadyRef = useRef(false)
-  const guestReadyRef = useRef(false)
-  useEffect(()=>{ hostReadyRef.current=hostReady },[hostReady])
-  useEffect(()=>{ guestReadyRef.current=guestReady },[guestReady])
-
-  // Called after ANY ready-state change (our own toggle, or receiving the
-  // opponent's broadcast) so the countdown reliably starts regardless of
-  // who readied up last. Only the host actually sends the start signal,
-  // to avoid both clients racing to send it.
-  const countdownStartedRef = useRef(false) // guards against re-sending countdown_start repeatedly
-
-  const checkBothReadyAndMaybeStart=async()=>{
-    if(hostReady && guestReady && isHostRef.current && !countdownStartedRef.current && countdown===null){
-      countdownStartedRef.current=true
-      const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
-      const startedAt=data||new Date().toISOString()
-      channelRef.current?.send({type:'broadcast',event:'countdown_start',payload:{startedAt}})
-      runCountdownFrom(startedAt)
-    }
-    if((!hostReady||!guestReady)) countdownStartedRef.current=false
-  }
-
-  // Re-evaluate on every relevant state change, not just on the specific
-  // event that happened to fire — this is what actually guarantees the
-  // countdown starts regardless of timing/order of ready clicks and presence sync.
-  useEffect(()=>{ checkBothReadyAndMaybeStart() },[hostReady,guestReady])
-
-  const toggleReady=()=>{
+  const toggleReady=async()=>{
+    const code=lobbyCodeRef.current
+    if(!code) return
     const role=isHostRef.current?'host':'guest'
-    const cur=isHostRef.current?hostReadyRef.current:guestReadyRef.current
+    const field=role==='host'?'host_ready':'guest_ready'
+    const cur=role==='host'?hostReady:guestReady
     const next=!cur
-    if(role==='host'){ setHostReady(next); hostReadyRef.current=next }
-    else { setGuestReady(next); guestReadyRef.current=next }
-    channelRef.current?.send({type:'broadcast',event:'ready',payload:{role,ready:next}})
-    if(!next){
-      channelRef.current?.send({type:'broadcast',event:'countdown_cancel',payload:{}})
-      if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
-    }
+    if(role==='host') setHostReady(next); else setGuestReady(next)
+    const patch={[field]:next}
+    if(!next) patch.countdown_started_at=null
+    await supabase.from('battleship_lobbies').update(patch).eq('code',code)
+    if(!next && countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
   }
 
-  const clockOffsetRef = useRef(0) // serverTime - clientTime, ms
+  // Poll the lobby row every 1.5s while sitting in the waiting lobby —
+  // this IS the sync mechanism, not a fallback.
+  useEffect(()=>{
+    if(!(mode==='online'&&onlinePhase==='waiting_lobby'&&lobbyCode)) return
+    pollLobbyRow()
+    const id=setInterval(pollLobbyRow,1500)
+    return ()=>clearInterval(id)
+  },[mode,onlinePhase,lobbyCode])
 
   const runCountdownFrom=(startedAt)=>{
     if(countdownTimerRef.current) clearInterval(countdownTimerRef.current)
     const tick=()=>{
-      const nowServer=Date.now()+clockOffsetRef.current
-      const elapsed=(nowServer-new Date(startedAt).getTime())/1000
+      const elapsed=(Date.now()-new Date(startedAt).getTime())/1000
       const remaining=Math.ceil(3-elapsed)
       if(remaining<=0){
         clearInterval(countdownTimerRef.current); countdownTimerRef.current=null
         setCountdown(null)
-        if(isHostRef.current){
-          const firstTurnUserId=hostPresence?.user_id||userRef.current?.id
-          channelRef.current?.send({type:'broadcast',event:'game_start',payload:{firstTurnUserId}})
-          setOnlineTurn(firstTurnUserId)
-          setOnlinePhase('placing')
-        }
         return
       }
       setCountdown(remaining)
@@ -1092,24 +991,61 @@ export function Battleship() {
     return ()=>clearInterval(id)
   },[mode,onlinePhase])
 
-  // Safety net: re-check both-ready every 5s while in the waiting lobby,
-  // in case a presence/broadcast event was missed and the reactive
-  // useEffect never got a chance to re-fire.
+  const teardownChannel=()=>{
+    if(channelRef.current){ supabase.removeChannel(channelRef.current); channelRef.current=null }
+  }
+
+  // Establish the broadcast channel for actual gameplay (shots, concede,
+  // back-to-lobby) once the game leaves the waiting lobby.
   useEffect(()=>{
-    if(!(mode==='online'&&onlinePhase==='waiting_lobby')) return
-    const id=setInterval(checkBothReadyAndMaybeStart,5000)
-    return ()=>clearInterval(id)
-  },[mode,onlinePhase])
+    if(!(mode==='online'&&(onlinePhase==='placing'||onlinePhase==='waiting_ship_placement'||onlinePhase==='playing')&&lobbyCode)) return
+    if(channelRef.current) return
+    const channel=supabase.channel(`lobby:${lobbyCode}`)
+    channelRef.current=channel
+    channel.on('broadcast',{event:'ships_ready'},({payload})=>{
+      if(payload.user_id===userRef.current?.id) return
+      setOpponentReady(true)
+    })
+    channel.on('broadcast',{event:'shot_result'},({payload})=>{
+      if(payload.to!==userRef.current?.id) return
+      setOEnemyImpact({cell:payload.cell,type:payload.hit?'explosion':'splash'}); clearAnim(setOEnemyImpact)
+      if(payload.sunkName){ showBanner(setOBanner,`🔥 You sunk their ${payload.sunkName}!`,'sunk',2500) }
+      else showBanner(setOBanner,payload.hit?'💥 HIT!':'💦 MISS',payload.hit?'hit':'miss')
+      if(payload.gameOver){ setOnlineWinner(userRef.current.id); setOnlinePhase('over') }
+    })
+    channel.on('broadcast',{event:'shot'},({payload})=>{
+      const{from,cell}=payload
+      const cur=myShipsRef.current
+      const hit=isHit(cur,cell[0],cell[1])
+      const updated=checkSunk(cur,[...oppShotsRef.current,cell])
+      const sunkShip=updated.find(s=>s.sunk&&isHit([s],cell[0],cell[1]))
+      channel.send({type:'broadcast',event:'shot_result',payload:{to:from,cell,hit,sunkName:sunkShip?sunkShip.name:null,gameOver:allSunk(updated)}})
+      if(from===userRef.current?.id) return
+      const newOppShots=[...oppShotsRef.current,cell]
+      showBanner(setOBanner,'Enemy has fired!','enemy_firing',SHELL_MS+600)
+      pendingORef.current={type:'incoming',cell}
+      setOMyShell({sx:(cell[1]+0.5)*csRef.current,sy:-csRef.current,dx:(cell[1]+0.5)*csRef.current,dy:(cell[0]+0.5)*csRef.current})
+      setOppShots(newOppShots); oppShotsRef.current=newOppShots
+    })
+    channel.on('broadcast',{event:'concede'},({payload})=>{
+      if(payload.from===userRef.current?.id) return
+      setOnlineWinner(userRef.current?.id)
+      setOnlinePhase('over')
+    })
+    channel.on('broadcast',{event:'back_to_lobby'},()=>{
+      teardownChannel()
+      setMyShots([]); myShotsRef.current=[]
+      setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
+      setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
+      setOBanner(null); setOpponentReady(false); setHostReady(false); setGuestReady(false)
+      pendingORef.current=null
+      setOnlinePhase('waiting_lobby')
+    })
+    channel.subscribe()
+    return ()=>{}
+  },[mode,onlinePhase,lobbyCode])
 
   useEffect(()=>()=>teardownChannel(),[])
-
-  // If the profile finishes loading (or username changes) after we already
-  // tracked presence with a placeholder name, re-track with the real one.
-  useEffect(()=>{
-    if(channelRef.current && profile?.username && lobbyCodeRef.current){
-      channelRef.current.track({user_id:userRef.current?.id,username:profile.username,role:isHostRef.current?'host':'guest'})
-    }
-  },[profile?.username])
 
   const resetAll=async()=>{
     if(mode==='online' && lobbyCodeRef.current){
@@ -1145,6 +1081,7 @@ export function Battleship() {
 
   const backToWaitingLobby=()=>{
     channelRef.current?.send({type:'broadcast',event:'back_to_lobby',payload:{}})
+    teardownChannel()
     setMyShots([]); myShotsRef.current=[]
     setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
     setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
