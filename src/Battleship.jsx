@@ -654,6 +654,10 @@ export function Battleship() {
   const myShotsRef = useRef([])
   const userRef = useRef(null)
   const isHostRef = useRef(false)
+  const hostPresenceRef = useRef(null)
+  const guestPresenceRef = useRef(null)
+  useEffect(()=>{ hostPresenceRef.current=hostPresence },[hostPresence])
+  useEffect(()=>{ guestPresenceRef.current=guestPresence },[guestPresence])
   const lobbyCodeRef = useRef(null)
   const myReadyRef = useRef(false)
   useEffect(()=>{ userRef.current=user },[user])
@@ -759,6 +763,8 @@ export function Battleship() {
 
   // ── Online: lobby browser (Postgres table, just for discovery) ──
   const loadLobbies=async()=>{
+    const cutoff=new Date(Date.now()-5000).toISOString()
+    await supabase.from('battleship_lobbies').delete().eq('status','waiting').lt('last_seen',cutoff)
     const{data}=await supabase.from('battleship_lobbies')
       .select('*')
       .eq('status','waiting')
@@ -804,11 +810,18 @@ export function Battleship() {
 
     channel.on('presence',{event:'sync'},()=>{
       applyPresenceState(channel.presenceState())
+      checkBothReadyAndMaybeStart()
     })
 
     channel.on('broadcast',{event:'ready'},({payload})=>{
-      if(payload.role==='host') setHostReady(payload.ready)
-      if(payload.role==='guest') setGuestReady(payload.ready)
+      if(payload.role==='host'){ setHostReady(payload.ready); hostReadyRef.current=payload.ready }
+      if(payload.role==='guest'){ setGuestReady(payload.ready); guestReadyRef.current=payload.ready }
+      if(!payload.ready){
+        if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
+        setCountdown(null)
+      } else {
+        checkBothReadyAndMaybeStart()
+      }
     })
 
     channel.on('broadcast',{event:'countdown_start'},({payload})=>{
@@ -875,13 +888,24 @@ export function Battleship() {
   const createLobby=async()=>{
     if(!user) return
     const code=makeCode()
-    await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting'})
+    await supabase.from('battleship_lobbies').insert({code,host_id:user.id,status:'waiting',last_seen:new Date().toISOString()})
     setLobbyCode(code); lobbyCodeRef.current=code
     setIsHost(true); isHostRef.current=true
     setHostReady(false); setGuestReady(false)
     await joinChannel(code,'host',profile?.username||'Host')
     setOnlinePhase('waiting_lobby')
   }
+
+  // Host heartbeat — keeps last_seen fresh while in the waiting lobby so the
+  // browser can tell abandoned lobbies (host closed tab without cleanup) from
+  // live ones, and delete the abandoned ones after 5s of silence.
+  useEffect(()=>{
+    if(!(mode==='online'&&onlinePhase==='waiting_lobby'&&isHost&&lobbyCode)) return
+    const beat=()=>supabase.from('battleship_lobbies').update({last_seen:new Date().toISOString()}).eq('code',lobbyCode)
+    beat()
+    const id=setInterval(beat,3000)
+    return ()=>clearInterval(id)
+  },[mode,onlinePhase,isHost,lobbyCode])
 
   const joinLobby=async(code)=>{
     if(!user) return; setJoinError('')
@@ -918,22 +942,35 @@ export function Battleship() {
     setOnlinePhase('lobby'); loadLobbies()
   }
 
-  const toggleReady=()=>{
-    const role=isHostRef.current?'host':'guest'
-    const cur=isHostRef.current?hostReady:guestReady
-    const next=!cur
-    myReadyRef.current=next
-    if(role==='host') setHostReady(next); else setGuestReady(next)
-    channelRef.current?.send({type:'broadcast',event:'ready',payload:{role,ready:next}})
-    channelRef.current?.send({type:'broadcast',event:'countdown_cancel',payload:{}})
-    if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
-    // Determine if both will now be ready, then host kicks off the countdown
-    const otherReady=role==='host'?guestReady:hostReady
-    const bothReady=next&&otherReady&&hostPresence&&guestPresence
-    if(bothReady && isHostRef.current){
+  const hostReadyRef = useRef(false)
+  const guestReadyRef = useRef(false)
+  useEffect(()=>{ hostReadyRef.current=hostReady },[hostReady])
+  useEffect(()=>{ guestReadyRef.current=guestReady },[guestReady])
+
+  // Called after ANY ready-state change (our own toggle, or receiving the
+  // opponent's broadcast) so the countdown reliably starts regardless of
+  // who readied up last. Only the host actually sends the start signal,
+  // to avoid both clients racing to send it.
+  const checkBothReadyAndMaybeStart=()=>{
+    if(hostReadyRef.current && guestReadyRef.current && hostPresenceRef.current && guestPresenceRef.current && isHostRef.current){
       const startedAt=new Date().toISOString()
       channelRef.current?.send({type:'broadcast',event:'countdown_start',payload:{startedAt}})
       runCountdownFrom(startedAt)
+    }
+  }
+
+  const toggleReady=()=>{
+    const role=isHostRef.current?'host':'guest'
+    const cur=isHostRef.current?hostReadyRef.current:guestReadyRef.current
+    const next=!cur
+    if(role==='host'){ setHostReady(next); hostReadyRef.current=next }
+    else { setGuestReady(next); guestReadyRef.current=next }
+    channelRef.current?.send({type:'broadcast',event:'ready',payload:{role,ready:next}})
+    if(!next){
+      channelRef.current?.send({type:'broadcast',event:'countdown_cancel',payload:{}})
+      if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
+    } else {
+      checkBothReadyAndMaybeStart()
     }
   }
 
@@ -1061,7 +1098,12 @@ export function Battleship() {
     channel.on('broadcast',{event:'shot'},handler)
   },[channelRef.current])
 
-  useEffect(()=>{ if(mode==='online'&&onlinePhase==='lobby') loadLobbies() },[mode,onlinePhase])
+  useEffect(()=>{
+    if(!(mode==='online'&&onlinePhase==='lobby')) return
+    loadLobbies()
+    const id=setInterval(loadLobbies,3000)
+    return ()=>clearInterval(id)
+  },[mode,onlinePhase])
   useEffect(()=>()=>teardownChannel(),[])
 
   // If the profile finishes loading (or username changes) after we already
