@@ -763,7 +763,7 @@ export function Battleship() {
 
   // ── Online: lobby browser (Postgres table, just for discovery) ──
   const loadLobbies=async()=>{
-    const cutoff=new Date(Date.now()-5000).toISOString()
+    const cutoff=new Date(Date.now()-5*60*1000).toISOString()
     await supabase.from('battleship_lobbies').delete().eq('status','waiting').lt('last_seen',cutoff)
     const{data}=await supabase.from('battleship_lobbies')
       .select('*')
@@ -810,7 +810,6 @@ export function Battleship() {
 
     channel.on('presence',{event:'sync'},()=>{
       applyPresenceState(channel.presenceState())
-      checkBothReadyAndMaybeStart()
     })
 
     channel.on('broadcast',{event:'ready'},({payload})=>{
@@ -819,8 +818,6 @@ export function Battleship() {
       if(!payload.ready){
         if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null }
         setCountdown(null)
-      } else {
-        checkBothReadyAndMaybeStart()
       }
     })
 
@@ -1005,8 +1002,6 @@ export function Battleship() {
     if(!next){
       channelRef.current?.send({type:'broadcast',event:'countdown_cancel',payload:{}})
       if(countdownTimerRef.current){ clearInterval(countdownTimerRef.current); countdownTimerRef.current=null; setCountdown(null) }
-    } else {
-      checkBothReadyAndMaybeStart()
     }
   }
 
@@ -1093,7 +1088,7 @@ export function Battleship() {
   useEffect(()=>{
     if(!(mode==='online'&&onlinePhase==='lobby')) return
     loadLobbies()
-    const id=setInterval(loadLobbies,3000)
+    const id=setInterval(loadLobbies,5000)
     return ()=>clearInterval(id)
   },[mode,onlinePhase])
   useEffect(()=>()=>teardownChannel(),[])
