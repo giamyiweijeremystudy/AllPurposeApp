@@ -900,11 +900,11 @@ export function Battleship() {
 
     channel.subscribe(async(status)=>{
       if(status==='SUBSCRIBED'){
-        const t0=Date.now()
-        const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
-        if(data){ const serverMs=new Date(data).getTime(); const rtt=Date.now()-t0; clockOffsetRef.current=serverMs+rtt/2-Date.now() }
         await channel.track({user_id:userRef.current.id,username,role})
         resolve(channel)
+        supabase.rpc('now_iso').then(({data})=>{
+          if(data){ const serverMs=new Date(data).getTime(); clockOffsetRef.current=serverMs-Date.now() }
+        }).catch(()=>{})
       }
     })
   })
@@ -977,7 +977,7 @@ export function Battleship() {
   // to avoid both clients racing to send it.
   const checkBothReadyAndMaybeStart=async()=>{
     if(hostReadyRef.current && guestReadyRef.current && hostPresenceRef.current && guestPresenceRef.current && isHostRef.current){
-      const{data}=await supabase.rpc('now_iso').single().catch(()=>({data:null}))
+      const{data}=await supabase.rpc('now_iso').catch(()=>({data:null}))
       const startedAt=data||new Date().toISOString()
       channelRef.current?.send({type:'broadcast',event:'countdown_start',payload:{startedAt}})
       runCountdownFrom(startedAt)
