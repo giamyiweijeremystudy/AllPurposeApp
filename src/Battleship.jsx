@@ -845,6 +845,27 @@ export function Battleship() {
       setOpponentReady(true)
     })
 
+    channel.on('broadcast',{event:'shot_result'},({payload})=>{
+      if(payload.to!==userRef.current?.id) return
+      setOEnemyImpact({cell:payload.cell,type:payload.hit?'explosion':'splash'}); clearAnim(setOEnemyImpact)
+      if(payload.sunkName){ showBanner(setOBanner,`🔥 You sunk their ${payload.sunkName}!`,'sunk',2500) }
+      else showBanner(setOBanner,payload.hit?'💥 HIT!':'💦 MISS',payload.hit?'hit':'miss')
+      if(payload.gameOver){ setOnlineWinner(userRef.current.id); setOnlinePhase('over') }
+    })
+
+    channel.on('broadcast',{event:'shot'},({payload})=>{
+      const{from,cell}=payload
+      const cur=myShipsRef.current
+      const hit=isHit(cur,cell[0],cell[1])
+      const updated=checkSunk(cur,[...oppShotsRef.current,cell])
+      const sunkShip=updated.find(s=>s.sunk&&isHit([s],cell[0],cell[1]))
+      channel.send({type:'broadcast',event:'shot_result',payload:{
+        to:from, cell, hit,
+        sunkName:sunkShip?sunkShip.name:null,
+        gameOver:allSunk(updated)
+      }})
+    })
+
     channel.on('broadcast',{event:'shot'},({payload})=>{
       if(payload.from===userRef.current?.id) return
       const newOppShots=[...oppShotsRef.current,payload.cell]
@@ -1048,55 +1069,8 @@ export function Battleship() {
 
   const onOEnemyShellLanded=()=>{
     setOEnemyShell(null)
-    const p=pendingORef.current; if(!p||p.type!=='outgoing') return
     pendingORef.current=null
-    const{cell}=p
-    // We don't have the opponent's ship layout (never sent — they keep it
-    // local for fairness). Hit/miss/sink for our own outgoing shots is
-    // determined by the opponent and reflected back via a 'shot_result'
-    // broadcast in a full implementation; for now, rely on opponent's own
-    // grid (myC) re-check on their next shot landing via their own ships.
-    // To keep this simple and correct, the opponent computes hit/sink
-    // locally against their own ships and we mirror via allSunk on shots length.
-    setOEnemyImpact({cell,type:'pending'})
-    clearAnim(setOEnemyImpact)
   }
-
-  // Opponent reports back whether our shot was a hit/sink/game-over, since
-  // only they know their own ship layout.
-  useEffect(()=>{
-    const channel=channelRef.current
-    if(!channel) return
-    const handler=({payload})=>{
-      if(payload.to!==user?.id) return
-      setOEnemyImpact({cell:payload.cell,type:payload.hit?'explosion':'splash'}); clearAnim(setOEnemyImpact)
-      if(payload.sunkName) { showBanner(setOBanner,`🔥 You sunk their ${payload.sunkName}!`,'sunk',2500) }
-      else showBanner(setOBanner,payload.hit?'💥 HIT!':'💦 MISS',payload.hit?'hit':'miss')
-      if(payload.gameOver){ setOnlineWinner(user.id); setOnlinePhase('over') }
-    }
-    channel.on('broadcast',{event:'shot_result'},handler)
-  },[channelRef.current,user])
-
-  // When we receive an incoming shot, compute the result against our own
-  // ships and broadcast it back so the shooter sees hit/miss/sink/game-over.
-  useEffect(()=>{
-    const channel=channelRef.current
-    if(!channel) return
-    const handler=({payload})=>{
-      const{from,cell}=payload
-      const cur=myShipsRef.current
-      const hit=isHit(cur,cell[0],cell[1])
-      const newOppShots=[...oppShotsRef.current]
-      const updated=checkSunk(cur,[...oppShotsRef.current])
-      const sunkShip=updated.find(s=>s.sunk&&isHit([s],cell[0],cell[1]))
-      channel.send({type:'broadcast',event:'shot_result',payload:{
-        to:from, cell, hit,
-        sunkName:sunkShip?sunkShip.name:null,
-        gameOver:allSunk(updated)
-      }})
-    }
-    channel.on('broadcast',{event:'shot'},handler)
-  },[channelRef.current])
 
   useEffect(()=>{
     if(!(mode==='online'&&onlinePhase==='lobby')) return
@@ -1355,6 +1329,11 @@ export function Battleship() {
 
   if(mode==='online'&&onlinePhase==='playing'){
     const myC=checkSunk(myShips,oppShots)
+    const turnBanner=(
+      <div style={{padding:'8px 16px',borderRadius:'var(--radius)',fontWeight:700,fontSize:13,textAlign:'center',background:isMyTurn?'rgba(34,197,94,0.15)':'rgba(220,38,38,0.12)',color:isMyTurn?'#22c55e':'#f87171',border:`1px solid ${isMyTurn?'#22c55e':'#dc2626'}`}}>
+        {isMyTurn?'🟢 Your turn — fire!':"🔴 Opponent's turn — wait…"}
+      </div>
+    )
     const fireBtn=<button onClick={handleFire} disabled={!selectedCell||!isMyTurn} style={{padding:'10px 24px',background:selectedCell&&isMyTurn?'#dc2626':'var(--bg-3)',border:`2px solid ${selectedCell&&isMyTurn?'#dc2626':'var(--border-2)'}`,borderRadius:'var(--radius-lg)',color:selectedCell&&isMyTurn?'#fff':'var(--text-3)',fontSize:14,fontWeight:700,cursor:selectedCell&&isMyTurn?'pointer':'not-allowed',fontFamily:'inherit',transition:'all 0.2s',boxShadow:selectedCell&&isMyTurn?'0 0 14px rgba(220,38,38,0.4)':'none'}}>🔥 FIRE{selectedCell?` → ${String.fromCharCode(65+selectedCell[1])}${selectedCell[0]+1}`:''}</button>
     const eGrid=<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{fontSize:10,fontWeight:700,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Enemy Waters</div><BattleGrid ships={[]} shots={myShots} onShot={isMyTurn?handleCellSelect:undefined} showShips={false} cs={cs} disabled={!isMyTurn||!!oEnemyShell} impact={oEnemyImpact} sinkShip={oEnemySink} shell={oEnemyShell} onLand={onOEnemyShellLanded}/>{selectedCell&&isMyTurn&&<div style={{fontSize:11,color:'var(--accent)'}}>Selected: {String.fromCharCode(65+selectedCell[1])}{selectedCell[0]+1}</div>}</div>
     const mGrid=<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{fontSize:10,fontWeight:700,color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Your Fleet</div><BattleGrid ships={myC} shots={oppShots} showShips={true} cs={cs} disabled={true} impact={oMyImpact} sinkShip={oMySink} shell={oMyShell} onLand={onOMyShellLanded}/></div>
@@ -1362,6 +1341,7 @@ export function Battleship() {
       <div style={{position:'absolute',inset:0,background:'var(--bg)',display:'flex',flexDirection:'column',alignItems:'center',overflowY:'auto',WebkitOverflowScrolling:'touch',...ns}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',flexShrink:0}}><button onClick={resetAll} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>← Menu</button><span style={{fontWeight:700,fontSize:13,flex:1,textAlign:'center'}}>Battleship</span><button onClick={()=>setConcedePopup(true)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>Concede</button></div>
         <div style={{padding:'0 6px',width:'100%',flexShrink:0}}><Banner event={oBanner}/></div>
+        <div style={{padding:'4px 10px',width:'100%',flexShrink:0}}>{turnBanner}</div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12,padding:'8px 0 20px'}}>{eGrid}{isMyTurn&&fireBtn}{mGrid}</div>
         {concedePopup&&(
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -1383,6 +1363,7 @@ export function Battleship() {
         <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:150,alignItems:'center'}}>
           <button onClick={resetAll} style={{width:'100%',padding:'6px',border:'1px solid var(--border-2)',borderRadius:'var(--radius)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>← Menu</button>
           <button onClick={()=>setConcedePopup(true)} style={{padding:'6px',border:'1px solid var(--danger)',borderRadius:'var(--radius)',background:'transparent',color:'var(--danger)',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Concede</button>
+          {turnBanner}
           <Banner event={oBanner}/>
           {fireBtn}
           <ShipHealth ships={myC} shots={oppShots} label="YOUR FLEET"/>
