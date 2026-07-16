@@ -48,7 +48,7 @@ export function AIHelper({ appId, userId, state, onDataChanged }) {
         const results = []
         for (const fc of data.functionCalls) {
           const result = await runFunctionCall(fc, { appId, userId, state })
-          results.push({ name: fc.name, args: fc.args, result })
+          results.push({ name: fc.name, args: fc.args, thoughtSignature: fc.thoughtSignature, result })
           setMessages(m => [...m, { role: 'assistant', content: (result.ok ? '✅ ' : '⚠️ ') + result.summary }])
         }
         if (results.some(r => r.result.ok)) onDataChanged?.()

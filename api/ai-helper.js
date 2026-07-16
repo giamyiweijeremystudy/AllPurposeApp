@@ -119,7 +119,13 @@ export default async function handler(req, res) {
   if (pendingFunctionResults?.length) {
     contents.push({
       role: 'model',
-      parts: pendingFunctionResults.map(r => ({ functionCall: { name: r.name, args: r.args || {} } })),
+      parts: pendingFunctionResults.map(r => {
+        const part = { functionCall: { name: r.name, args: r.args || {} } }
+        // Required by Gemini 3 thinking models — must be echoed back exactly
+        // as received, or the call is rejected / reasoning quality degrades.
+        if (r.thoughtSignature) part.thoughtSignature = r.thoughtSignature
+        return part
+      }),
     })
     contents.push({
       role: 'function',
@@ -152,7 +158,13 @@ export default async function handler(req, res) {
     const text = parts.filter(p => p.text).map(p => p.text).join('\n\n').trim()
     const functionCalls = parts
       .filter(p => p.functionCall)
-      .map(p => ({ name: p.functionCall.name, args: p.functionCall.args || {} }))
+      .map(p => ({
+        name: p.functionCall.name,
+        args: p.functionCall.args || {},
+        // Gemini 3 requires this to be echoed back verbatim on the next
+        // turn (only the first parallel functionCall part carries one).
+        thoughtSignature: p.thoughtSignature,
+      }))
 
     return res.status(200).json({ text, functionCalls })
   } catch (err) {
