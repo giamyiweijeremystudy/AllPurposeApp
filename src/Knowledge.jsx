@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(window.innerWidth <= 768)
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return mobile
+}
+
 const AI_MODES = [
   { id: 'expand', label: 'Expand', icon: 'ti-arrows-diagonal' },
   { id: 'summarize', label: 'Summarize', icon: 'ti-align-left' },
@@ -10,6 +20,7 @@ const AI_MODES = [
 ]
 
 export function Knowledge({ appId, userId }) {
+  const isMobile = useIsMobile()
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState(null)
@@ -90,42 +101,56 @@ export function Knowledge({ appId, userId }) {
   if (loading) return <div style={{ padding: 24, color: 'var(--text-3)' }}>Loading…</div>
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: '100%', maxWidth: 1100, margin: '0 auto' }}>
-      {/* Entry list */}
-      <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', paddingRight: 12 }}>
-        <button onClick={createEntry} style={{
-          display: 'flex', alignItems: 'center', gap: 6, border: 'none', borderRadius: 10,
-          padding: '8px 12px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600,
-          cursor: 'pointer', marginBottom: 10,
+    <div style={{ display: 'flex', gap: isMobile ? 0 : 16, height: '100%', maxWidth: 1100, margin: '0 auto' }}>
+      {/* Entry list — full width on mobile when nothing is selected, hidden once an entry is open */}
+      {(!isMobile || !activeId) && (
+        <div style={{
+          width: isMobile ? '100%' : 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          borderRight: isMobile ? 'none' : '1px solid var(--border)', paddingRight: isMobile ? 0 : 12,
         }}>
-          <i className="ti ti-plus" /> New entry
-        </button>
-        <input
-          value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-          style={{
-            border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 13,
-            background: 'var(--bg)', color: 'var(--text)', marginBottom: 10,
-          }}
-        />
-        <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {filtered.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 12.5, padding: '8px 4px' }}>No entries yet.</div>}
-          {filtered.map(e => (
-            <button key={e.id} onClick={() => { setActiveId(e.id); setAiDraft(null) }} style={{
-              textAlign: 'left', border: 'none', borderRadius: 8, padding: '8px 10px',
-              background: e.id === activeId ? 'var(--accent-soft, rgba(99,102,241,0.12))' : 'transparent',
-              color: 'var(--text)', cursor: 'pointer', fontSize: 13,
-            }}>
-              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title || 'Untitled'}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {e.content?.slice(0, 60) || 'Empty'}
-              </div>
-            </button>
-          ))}
+          <button onClick={createEntry} style={{
+            display: 'flex', alignItems: 'center', gap: 6, border: 'none', borderRadius: 10,
+            padding: '10px 12px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600,
+            cursor: 'pointer', marginBottom: 10,
+          }}>
+            <i className="ti ti-plus" /> New entry
+          </button>
+          <input
+            value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+            style={{
+              border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13.5,
+              background: 'var(--bg)', color: 'var(--text)', marginBottom: 10,
+            }}
+          />
+          <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {filtered.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 12.5, padding: '8px 4px' }}>No entries yet.</div>}
+            {filtered.map(e => (
+              <button key={e.id} onClick={() => { setActiveId(e.id); setAiDraft(null) }} style={{
+                textAlign: 'left', border: 'none', borderRadius: 8, padding: isMobile ? '12px 10px' : '8px 10px',
+                background: e.id === activeId ? 'var(--accent-soft, rgba(99,102,241,0.12))' : 'transparent',
+                color: 'var(--text)', cursor: 'pointer', fontSize: 13.5,
+              }}>
+                <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title || 'Untitled'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {e.content?.slice(0, 60) || 'Empty'}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Editor */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {/* Editor — full width on mobile once an entry is open, always visible on desktop */}
+      {(!isMobile || activeId) && (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, width: isMobile ? '100%' : undefined }}>
+        {isMobile && active && (
+          <button onClick={() => { setActiveId(null); setAiDraft(null) }} style={{
+            display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent',
+            color: 'var(--text-3)', fontSize: 13, padding: '4px 2px', marginBottom: 8, cursor: 'pointer', alignSelf: 'flex-start',
+          }}>
+            <i className="ti ti-arrow-left" /> All entries
+          </button>
+        )}
         {!active ? (
           <div style={{ color: 'var(--text-3)', fontSize: 13.5, padding: 24, textAlign: 'center' }}>
             Select an entry, or create a new one, to start writing.
@@ -144,7 +169,8 @@ export function Knowledge({ appId, userId }) {
                 placeholder="Title"
               />
               <button onClick={() => deleteEntry(active.id)} title="Delete entry" style={{
-                border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 16, padding: 6,
+                border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 18,
+                padding: 8, minWidth: 36, minHeight: 36,
               }}>
                 <i className="ti ti-trash" />
               </button>
@@ -168,7 +194,7 @@ export function Knowledge({ appId, userId }) {
               {AI_MODES.map(m => (
                 <button key={m.id} onClick={() => runAI(m.id)} disabled={aiBusy} style={{
                   display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--border)', borderRadius: 8,
-                  padding: '6px 10px', background: 'var(--bg)', color: 'var(--text)', fontSize: 12.5,
+                  padding: isMobile ? '9px 12px' : '6px 10px', background: 'var(--bg)', color: 'var(--text)', fontSize: 12.5,
                   cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.5 : 1,
                 }}>
                   <i className={`ti ${m.icon}`} /> {m.label}
@@ -226,6 +252,7 @@ export function Knowledge({ appId, userId }) {
           </>
         )}
       </div>
+      )}
     </div>
   )
 }
