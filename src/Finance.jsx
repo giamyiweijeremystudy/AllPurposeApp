@@ -75,8 +75,8 @@ export function Finance({ appId, userId }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
-  const [form, setForm] = useState({ kind: 'expense', amount: '', category: 'Food', description: '', entry_date: todayStr() })
-  const [adding, setAdding] = useState(false)
+  const [filter, setFilter] = useState('all') // 'all' | 'expense' | 'income'
+  const [modalEntry, setModalEntry] = useState(null) // null = closed, {} = new, {...entry} = editing
 
   const reload = () => {
     supabase.from('finance_entries').select('*')
@@ -91,6 +91,7 @@ export function Finance({ appId, userId }) {
     const s = dstr(start), e = dstr(end)
     return entries.filter(x => x.entry_date >= s && x.entry_date <= e)
   }, [entries, start, end])
+  const visibleEntries = useMemo(() => inRange.filter(x => filter === 'all' || x.kind === filter), [inRange, filter])
 
   const totals = useMemo(() => {
     const income = inRange.filter(e => e.kind === 'income').reduce((s, e) => s + Number(e.amount), 0)
@@ -142,22 +143,25 @@ export function Finance({ appId, userId }) {
   const animExpense = useCountUp(totals.expense)
   const animNet = useCountUp(totals.net)
 
-  const addEntry = async () => {
-    const amount = parseFloat(form.amount)
+  const saveEntry = async (data) => {
+    const amount = parseFloat(data.amount)
     if (!amount || amount <= 0) return
-    setAdding(true)
-    const { data, error } = await supabase.from('finance_entries').insert({
-      app_id: appId, user_id: userId, kind: form.kind, amount,
-      category: form.category, description: form.description.trim(), entry_date: form.entry_date,
-    }).select().single()
-    setAdding(false)
-    if (error) return
-    setEntries(prev => [data, ...prev].sort((a, b) => b.entry_date.localeCompare(a.entry_date)))
-    setForm(f => ({ ...f, amount: '', description: '' }))
+    const payload = { kind: data.kind, amount, category: data.category, description: data.description.trim(), entry_date: data.entry_date }
+    if (data.id) {
+      const { data: updated, error } = await supabase.from('finance_entries').update(payload).eq('id', data.id).select().single()
+      if (error) return
+      setEntries(prev => prev.map(e => e.id === data.id ? updated : e))
+    } else {
+      const { data: created, error } = await supabase.from('finance_entries').insert({ app_id: appId, user_id: userId, ...payload }).select().single()
+      if (error) return
+      setEntries(prev => [created, ...prev].sort((a, b) => b.entry_date.localeCompare(a.entry_date)))
+    }
+    setModalEntry(null)
   }
-  const deleteEntry = async (id) => {
+  const deleteEntryById = async (id) => {
     await supabase.from('finance_entries').delete().eq('id', id)
     setEntries(prev => prev.filter(e => e.id !== id))
+    setModalEntry(null)
   }
 
   if (loading) return <div style={{ padding: 24, color: 'var(--text-3)' }}>Loading…</div>
@@ -236,57 +240,83 @@ export function Finance({ appId, userId }) {
         <DonutChart byCategory={totals.byCategory} total={totals.expense} />
       )}
 
-      {/* Add entry */}
-      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14, background: 'var(--bg)', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow)' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['expense', 'income'].map(k => (
-            <button key={k} onClick={() => setForm(f => ({ ...f, kind: k }))} style={{
-              flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 600,
-              background: form.kind === k ? 'var(--accent)' : 'transparent', color: form.kind === k ? '#fff' : 'var(--text)',
-              cursor: 'pointer', textTransform: 'capitalize',
-            }}>{k}</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <input type="number" inputMode="decimal" placeholder="Amount" value={form.amount}
-            onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-            style={{ ...inp, flex: '1 1 100px' }} />
-          <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={{ ...inp, flex: '1 1 110px' }}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <input type="date" value={form.entry_date} onChange={e => setForm(f => ({ ...f, entry_date: e.target.value }))} style={{ ...inp, flex: '1 1 130px' }} />
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input placeholder="Description (optional)" value={form.description}
-            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            onKeyDown={e => e.key === 'Enter' && addEntry()} style={{ ...inp, flex: 1 }} />
-          <button onClick={addEntry} disabled={adding || !parseFloat(form.amount)} style={{
-            border: 'none', borderRadius: 8, padding: '0 16px', background: 'var(--accent)', color: '#fff',
-            fontSize: 13.5, fontWeight: 600, cursor: adding || !parseFloat(form.amount) ? 'default' : 'pointer',
-            opacity: adding || !parseFloat(form.amount) ? 0.5 : 1,
-          }}>Add</button>
-        </div>
-      </div>
-
-      {/* Entries */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {inRange.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 13, textAlign: 'center', padding: 12 }}>No entries in this {period}.</div>}
-        {inRange.map(e => (
-          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', background: 'var(--bg)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, background: CAT_COLORS[e.category] || CAT_COLORS.Other, flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.description || e.category}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{e.category} · {e.entry_date}</div>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: e.kind === 'income' ? 'var(--success)' : 'var(--text)' }}>
-              {e.kind === 'income' ? '+' : '−'}{fmtMoney(e.amount)}
-            </div>
-            <button onClick={() => deleteEntry(e.id)} title="Delete" style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', fontSize: 15, padding: 6 }}>
-              <i className="ti ti-x" />
-            </button>
-          </div>
+      {/* Type filter (view-only — tap to filter the list below) */}
+      <div style={{ display: 'flex', gap: 6, border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 4, background: 'var(--bg)', boxShadow: 'var(--shadow)' }}>
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'expense', label: 'Expense' },
+          { key: 'income', label: 'Income' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+            flex: 1, border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: filter === f.key ? 'var(--accent)' : 'transparent', color: filter === f.key ? '#fff' : 'var(--text-2)',
+          }}>{f.label}</button>
         ))}
       </div>
+
+      {/* Entries table */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg)', boxShadow: 'var(--shadow)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, flex: 1 }}>
+            Transactions {filter !== 'all' && `· ${filter}`}
+          </div>
+          <button onClick={() => setModalEntry({})} style={{
+            display: 'flex', alignItems: 'center', gap: 5, border: 'none', borderRadius: 8, padding: '6px 11px',
+            background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <i className="ti ti-plus" /> Add
+          </button>
+        </div>
+
+        {visibleEntries.length === 0 ? (
+          <div style={{ color: 'var(--text-3)', fontSize: 13, textAlign: 'center', padding: 20 }}>No entries in this {period}.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+              <thead>
+                <tr>
+                  {['Date', 'Description', 'Category', 'Type', 'Amount', ''].map((h, i) => (
+                    <th key={h || i} style={{
+                      textAlign: i === 4 ? 'right' : 'left', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase',
+                      letterSpacing: 0.4, fontWeight: 600, padding: '8px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleEntries.map(e => (
+                  <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{e.entry_date}</td>
+                    <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description || '—'}</td>
+                    <td style={{ padding: '10px 14px', fontSize: 12.5 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 4, background: CAT_COLORS[e.category] || CAT_COLORS.Other, flexShrink: 0 }} />
+                        {e.category}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', fontSize: 12, textTransform: 'capitalize', color: e.kind === 'income' ? 'var(--success)' : 'var(--text-2)' }}>{e.kind}</td>
+                    <td style={{ padding: '10px 14px', fontSize: 13.5, fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap', color: e.kind === 'income' ? 'var(--success)' : 'var(--text)' }}>
+                      {e.kind === 'income' ? '+' : '−'}{fmtMoney(e.amount)}
+                    </td>
+                    <td style={{ padding: '10px 10px', textAlign: 'right' }}>
+                      <button onClick={() => setModalEntry(e)} title="Edit" style={{
+                        border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 7, padding: '5px 9px',
+                        color: 'var(--text-2)', cursor: 'pointer', fontSize: 12.5,
+                      }}>
+                        <i className="ti ti-pencil" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {modalEntry && (
+        <EntryModal entry={modalEntry} onSave={saveEntry} onDelete={deleteEntryById} onClose={() => setModalEntry(null)} />
+      )}
 
       {assistantOpen && (
         <FinanceAssistant appId={appId} userId={userId} entries={entries} onClose={() => setAssistantOpen(false)} onEntriesAdded={reload} />
@@ -377,6 +407,84 @@ function DonutChart({ byCategory, total }) {
             <span style={{ fontWeight: 600, width: 76, textAlign: 'right' }}>{fmtMoney(s.amt)}</span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+// Add/edit/delete modal, triggered by the header "Add" button or a row's edit button -----
+function EntryModal({ entry, onSave, onDelete, onClose }) {
+  const isEdit = !!entry.id
+  const [data, setData] = useState({
+    kind: entry.kind || 'expense',
+    amount: entry.amount != null ? String(entry.amount) : '',
+    category: entry.category || 'Food',
+    description: entry.description || '',
+    entry_date: entry.entry_date || todayStr(),
+  })
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const valid = parseFloat(data.amount) > 0
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg)', width: '100%', maxWidth: 380, borderRadius: 'var(--radius-lg)', padding: 18,
+        boxShadow: 'var(--shadow-lg)', animation: 'module-enter 0.22s var(--ease-out)', display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', flex: 1 }}>{isEdit ? 'Edit entry' : 'Add entry'}</div>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer' }}><i className="ti ti-x" /></button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['expense', 'income'].map(k => (
+            <button key={k} onClick={() => setData(d => ({ ...d, kind: k }))} style={{
+              flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 600,
+              background: data.kind === k ? 'var(--accent)' : 'transparent', color: data.kind === k ? '#fff' : 'var(--text)',
+              cursor: 'pointer', textTransform: 'capitalize',
+            }}>{k}</button>
+          ))}
+        </div>
+
+        <input type="number" inputMode="decimal" placeholder="Amount" value={data.amount}
+          onChange={e => setData(d => ({ ...d, amount: e.target.value }))} style={inp} autoFocus />
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select value={data.category} onChange={e => setData(d => ({ ...d, category: e.target.value }))} style={{ ...inp, flex: 1 }}>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input type="date" value={data.entry_date} onChange={e => setData(d => ({ ...d, entry_date: e.target.value }))} style={{ ...inp, flex: 1 }} />
+        </div>
+
+        <input placeholder="Description (optional)" value={data.description}
+          onChange={e => setData(d => ({ ...d, description: e.target.value }))}
+          onKeyDown={e => e.key === 'Enter' && valid && onSave({ ...data, id: entry.id })} style={inp} />
+
+        {confirmingDelete ? (
+          <div style={{ border: '1px solid var(--danger)', borderRadius: 8, padding: 10, background: 'var(--danger-bg)', fontSize: 12.5 }}>
+            <div style={{ marginBottom: 8 }}>Delete this entry? This can't be undone.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => onDelete(entry.id)} style={{ border: 'none', borderRadius: 7, padding: '7px 12px', background: 'var(--danger)', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setConfirmingDelete(false)} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '7px 12px', background: 'transparent', color: 'var(--text)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            {isEdit && (
+              <button onClick={() => setConfirmingDelete(true)} title="Delete" style={{
+                border: '1px solid var(--border)', borderRadius: 8, padding: '0 12px', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 15,
+              }}><i className="ti ti-trash" /></button>
+            )}
+            <button onClick={onClose} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', background: 'transparent', color: 'var(--text)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+            <button onClick={() => onSave({ ...data, id: entry.id })} disabled={!valid} style={{
+              flex: 1, border: 'none', borderRadius: 8, padding: '9px 0', background: 'var(--accent)', color: '#fff',
+              fontSize: 13.5, fontWeight: 600, cursor: valid ? 'pointer' : 'default', opacity: valid ? 1 : 0.5,
+            }}>Save</button>
+          </div>
+        )}
       </div>
     </div>
   )
