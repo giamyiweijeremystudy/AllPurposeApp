@@ -11,11 +11,19 @@
 // (using the signed-in user's own session, so normal RLS rules apply —
 // this function never touches the database itself), and sends the
 // result back in a follow-up request via `pendingFunctionResults`.
+//
+// Full CRUD is exposed for everything the AI Helper's context includes
+// (tasks, calendar events, notes, sidebar pages) — not just creation.
+// The app snapshot passed as `context` includes each item's id so the
+// model can target a specific record for update_/delete_ calls.
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite' // current cost-efficient GA model; replaces the retired gemini-2.5-flash
 
+const ID_PARAM = { type: 'STRING', description: "The item's id, taken from the app snapshot (e.g. from '[id:...]')." }
+
 const TOOLS = [{
   functionDeclarations: [
+    // ── Tasks ──────────────────────────────────────────────
     {
       name: 'add_task',
       description: "Add a new task to the user's task list.",
@@ -30,30 +38,26 @@ const TOOLS = [{
       },
     },
     {
-      name: 'add_page',
-      description: 'Add a new page to the app sidebar (e.g. a new tool or section of the app).',
+      name: 'update_task',
+      description: 'Update an existing task (title, due date, priority, or mark complete/incomplete).',
       parameters: {
         type: 'OBJECT',
         properties: {
-          label: { type: 'STRING', description: 'The page name shown in the sidebar' },
-          icon: { type: 'STRING', description: "A Tabler icon class like 'ti-star' or 'ti-book', optional" },
-          section: { type: 'STRING', description: "Which sidebar section to put it under (e.g. Main, Work). Optional, defaults to Main; a new section is created if it doesn't exist." },
+          id: ID_PARAM,
+          title: { type: 'STRING' },
+          due_date: { type: 'STRING', description: 'YYYY-MM-DD, or empty string to clear it' },
+          priority: { type: 'STRING', description: 'low, medium, or high' },
+          completed: { type: 'BOOLEAN' },
         },
-        required: ['label'],
+        required: ['id'],
       },
     },
     {
-      name: 'add_note',
-      description: "Add a note widget to the app's Overview page.",
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          label: { type: 'STRING', description: 'Short title for the note' },
-          note: { type: 'STRING', description: 'The note content' },
-        },
-        required: ['label', 'note'],
-      },
+      name: 'delete_task',
+      description: 'Delete a task.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    // ── Calendar events ────────────────────────────────────
     {
       name: 'add_event',
       description: "Add an event to the user's calendar.",
@@ -67,6 +71,81 @@ const TOOLS = [{
         },
         required: ['title', 'start_at'],
       },
+    },
+    {
+      name: 'update_event',
+      description: 'Update an existing calendar event.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          id: ID_PARAM,
+          title: { type: 'STRING' },
+          start_at: { type: 'STRING', description: 'ISO 8601 datetime' },
+          end_at: { type: 'STRING', description: 'ISO 8601 datetime' },
+          all_day: { type: 'BOOLEAN' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_event',
+      description: "Delete an event from the user's calendar. Use this whenever the user asks to remove/cancel/delete a calendar event — do it directly, don't tell the user to do it manually.",
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
+    // ── Notes (Overview page widgets) ─────────────────────
+    {
+      name: 'add_note',
+      description: "Add a note widget to the app's Overview page.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          label: { type: 'STRING', description: 'Short title for the note' },
+          note: { type: 'STRING', description: 'The note content' },
+        },
+        required: ['label', 'note'],
+      },
+    },
+    {
+      name: 'update_note',
+      description: 'Update an existing note widget.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { id: ID_PARAM, label: { type: 'STRING' }, note: { type: 'STRING' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_note',
+      description: 'Delete a note widget.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
+    // ── Sidebar pages ──────────────────────────────────────
+    {
+      name: 'add_page',
+      description: 'Add a new page to the app sidebar (e.g. a new tool or section of the app).',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          label: { type: 'STRING', description: 'The page name shown in the sidebar' },
+          icon: { type: 'STRING', description: "A Tabler icon class like 'ti-star' or 'ti-book', optional" },
+          section: { type: 'STRING', description: "Which sidebar section to put it under (e.g. Main, Work). Optional, defaults to Main; a new section is created if it doesn't exist." },
+        },
+        required: ['label'],
+      },
+    },
+    {
+      name: 'update_page',
+      description: 'Rename or change the icon of an existing sidebar page.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { id: ID_PARAM, label: { type: 'STRING' }, icon: { type: 'STRING' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_page',
+      description: 'Remove a page from the sidebar.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
   ],
 }]
@@ -101,8 +180,9 @@ export default async function handler(req, res) {
 
   const systemInstruction = [
     "You are the AI Helper built into this user's personal dashboard app.",
-    "You can see a snapshot of their app data below (tasks, calendar events, notes, and page layout) and can answer questions about it, summarize it, generate content, or take action using the available tools (add_task, add_page, add_note, add_event) when the user asks you to add or create something.",
-    "Only call a tool when the user has actually asked for something to be added/created — don't call tools just to answer a question.",
+    "You can see a snapshot of their app data below (tasks, calendar events, notes, and page layout, each with an id) and can answer questions about it, summarize it, generate content, or take action using the available tools — including creating, updating, AND deleting tasks, events, notes, and sidebar pages — whenever the user asks. You are not limited to only creating things; if the user asks you to remove, delete, cancel, rename, or edit something, use the matching update_/delete_ tool directly. Never tell the user to make a change manually if a tool exists for it.",
+    "When the user refers to an item by name (e.g. 'delete my dentist appointment'), match it against the id shown in the app snapshot below and use that id in the tool call. If more than one item plausibly matches, ask which one before acting rather than guessing.",
+    "Only call a tool when the user has actually asked for something to be added/changed/removed — don't call tools just to answer a question.",
     "Be concise and practical. Use plain text with simple line breaks; avoid heavy markdown.",
     context ? `\n\n--- Current app snapshot ---\n${String(context).slice(0, 12000)}` : '',
   ].join(' ')

@@ -4,7 +4,7 @@ import { runFunctionCall } from './aiHelperActions.js'
 
 export function AIHelper({ appId, userId, state, onDataChanged }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "Hi! I can read your tasks, upcoming events, and notes, and I can add tasks, pages, notes, or calendar events for you directly — just ask." }
+    { role: 'assistant', content: "Hi! I can read your tasks, events, notes, and pages, and I can add, edit, or delete any of them directly — just ask." }
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -106,7 +106,7 @@ export function AIHelper({ appId, userId, state, onDataChanged }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Ask about your tasks, or ask me to add a task, page, note, or event…"
+          placeholder="Ask about your data, or ask me to add, edit, or delete a task, page, note, or event…"
           rows={1}
           style={{
             flex: 1, resize: 'none', border: '1px solid var(--border)', borderRadius: 10,
