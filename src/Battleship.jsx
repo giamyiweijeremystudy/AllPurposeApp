@@ -660,6 +660,7 @@ export function Battleship() {
   useEffect(()=>{ guestPresenceRef.current=guestPresence },[guestPresence])
   const lobbyCodeRef = useRef(null)
   const myReadyRef = useRef(false)
+  const channelReadyRef = useRef(false) // true once the realtime channel has actually SUBSCRIBED
   useEffect(()=>{ userRef.current=user },[user])
   useEffect(()=>{ isHostRef.current=isHost },[isHost])
   useEffect(()=>{ lobbyCodeRef.current=lobbyCode },[lobbyCode])
@@ -862,7 +863,13 @@ export function Battleship() {
     if(error||!lb){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.status!=='waiting'){ setLobbyPopup('This lobby no longer exists.'); return }
     if(lb.host_id===user.id){ setJoinError("That's your own lobby!"); return }
-    await supabase.from('battleship_lobbies').update({guest_id:user.id,status:'full',guest_ready:false}).eq('code',code).eq('status','waiting')
+    // Guard against two guests racing to join the same lobby: only proceed
+    // if OUR update is the one that actually flipped status waiting->full.
+    const{data:claimed,error:claimErr}=await supabase.from('battleship_lobbies')
+      .update({guest_id:user.id,status:'full',guest_ready:false})
+      .eq('code',code).eq('status','waiting')
+      .select().maybeSingle()
+    if(claimErr||!claimed){ setLobbyPopup('Someone else just joined this lobby.'); loadLobbies(); return }
     setLobbyCode(code); lobbyCodeRef.current=code
     setIsHost(false); isHostRef.current=false
     setHostReady(false); setGuestReady(false)
@@ -947,9 +954,21 @@ export function Battleship() {
     setTimeout(()=>showBanner(setOBanner,'Your turn — fire!','info',10000),400)
   }
 
+  // Broadcast sends fired before the channel finishes subscribing are
+  // silently dropped by Supabase Realtime. Retry until channelReadyRef is
+  // true instead of firing once and hoping for the best.
+  const sendWhenReady=(msg,attempts=0)=>{
+    if(channelRef.current && channelReadyRef.current){
+      channelRef.current.send(msg)
+    } else if(attempts<50){ // ~7.5s max backoff
+      setTimeout(()=>sendWhenReady(msg,attempts+1),150)
+    }
+  }
+
   const submitShipsOnline=(ships)=>{
     setMyShips(ships); myShipsRef.current=ships
-    channelRef.current?.send({type:'broadcast',event:'ships_ready',payload:{user_id:user.id}})
+    myReadyRef.current=true
+    sendWhenReady({type:'broadcast',event:'ships_ready',payload:{user_id:user.id}})
     setOnlinePhase('waiting_ship_placement')
   }
 
@@ -976,7 +995,7 @@ export function Battleship() {
     showBanner(setOBanner,'🎯 You are firing…','firing',SHELL_MS+400)
     pendingORef.current={type:'outgoing',cell:[r,c]}
     setOEnemyShell({sx:csRef.current/2,sy:-csRef.current,dx:(c+0.5)*csRef.current,dy:(r+0.5)*csRef.current})
-    channelRef.current?.send({type:'broadcast',event:'shot',payload:{from:user.id,cell:[r,c]}})
+    sendWhenReady({type:'broadcast',event:'shot',payload:{from:user.id,cell:[r,c]}})
   }
 
   const onOEnemyShellLanded=()=>{
@@ -992,6 +1011,7 @@ export function Battleship() {
   },[mode,onlinePhase])
 
   const teardownChannel=()=>{
+    channelReadyRef.current=false
     if(channelRef.current){ supabase.removeChannel(channelRef.current); channelRef.current=null }
   }
 
@@ -1000,11 +1020,20 @@ export function Battleship() {
   useEffect(()=>{
     if(!(mode==='online'&&(onlinePhase==='placing'||onlinePhase==='waiting_ship_placement'||onlinePhase==='playing')&&lobbyCode)) return
     if(channelRef.current) return
+    channelReadyRef.current=false
     const channel=supabase.channel(`lobby:${lobbyCode}`)
     channelRef.current=channel
     channel.on('broadcast',{event:'ships_ready'},({payload})=>{
       if(payload.user_id===userRef.current?.id) return
       setOpponentReady(true)
+    })
+    // Lets a client that subscribes late (or reconnects) ask the other side
+    // to re-announce its ready state, instead of hanging forever.
+    channel.on('broadcast',{event:'request_ready_status'},({payload})=>{
+      if(payload?.from===userRef.current?.id) return
+      if(myReadyRef.current){
+        channel.send({type:'broadcast',event:'ships_ready',payload:{user_id:userRef.current?.id}})
+      }
     })
     channel.on('broadcast',{event:'shot_result'},({payload})=>{
       if(payload.to!==userRef.current?.id) return
@@ -1034,6 +1063,7 @@ export function Battleship() {
     })
     channel.on('broadcast',{event:'back_to_lobby'},()=>{
       teardownChannel()
+      myReadyRef.current=false
       setMyShots([]); myShotsRef.current=[]
       setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
       setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
@@ -1041,7 +1071,18 @@ export function Battleship() {
       pendingORef.current=null
       setOnlinePhase('waiting_lobby')
     })
-    channel.subscribe()
+    channel.subscribe((status)=>{
+      if(status==='SUBSCRIBED'){
+        channelReadyRef.current=true
+        // Ask the opponent to re-announce readiness in case they placed
+        // ships before we finished subscribing, and re-announce our own
+        // in case we placed ships before *they* subscribed.
+        channel.send({type:'broadcast',event:'request_ready_status',payload:{from:userRef.current?.id}})
+        if(myReadyRef.current){
+          channel.send({type:'broadcast',event:'ships_ready',payload:{user_id:userRef.current?.id}})
+        }
+      }
+    })
     return ()=>{}
   },[mode,onlinePhase,lobbyCode])
 
@@ -1067,21 +1108,23 @@ export function Battleship() {
     setKickedMsg(null); setLobbyPopup(null); setCountdown(null)
     setConcedePopup(false)
     pendingShotRef.current=null; pendingORef.current=null
+    myReadyRef.current=false
   }
 
   const concedeGame=()=>{
     setConcedePopup(false)
     if(mode==='ai'){ setWinner('ai'); setPhase('over'); return }
     if(mode==='online'){
-      channelRef.current?.send({type:'broadcast',event:'concede',payload:{from:user.id}})
+      sendWhenReady({type:'broadcast',event:'concede',payload:{from:user.id}})
       setOnlineWinner(user.id)
       setOnlinePhase('over')
     }
   }
 
   const backToWaitingLobby=()=>{
-    channelRef.current?.send({type:'broadcast',event:'back_to_lobby',payload:{}})
+    sendWhenReady({type:'broadcast',event:'back_to_lobby',payload:{}})
     teardownChannel()
+    myReadyRef.current=false
     setMyShots([]); myShotsRef.current=[]
     setOppShots([]); oppShotsRef.current=[]; setMyShips([]); myShipsRef.current=[]
     setOnlineTurn(null); setOnlineWinner(null); setSelectedCell(null)
