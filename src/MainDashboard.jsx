@@ -12,7 +12,7 @@ function todayStr() {
 }
 
 // ── Quick Access tab ──────────────────────────────────────────
-export function QuickAccessTab({ navItems, sections, activeNavId, onNavigate, appId, userId }) {
+export function QuickAccessTab({ navItems, sections, activeNavId, onNavigate }) {
   const otherPages = navItems.filter(i => i.id !== activeNavId)
   const today = new Date()
   const greeting = today.getHours() < 12 ? 'Good morning' : today.getHours() < 17 ? 'Good afternoon' : 'Good evening'
@@ -20,12 +20,11 @@ export function QuickAccessTab({ navItems, sections, activeNavId, onNavigate, ap
 
   return (
     <div style={{ maxWidth:900, margin:'0 auto' }}>
-      <div style={{ marginBottom:20 }}>
+      <div style={{ marginBottom:24 }}>
         <div style={{ fontSize:24, fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'-0.01em' }}>{greeting}</div>
         <div style={{ fontSize:13, color:'var(--text-3)', marginTop:2 }}>{dateLabel}</div>
       </div>
 
-      <LiveModules appId={appId} userId={userId} navItems={navItems} onNavigate={onNavigate} />
       {sections.sort((a,b) => a.sort_order - b.sort_order).map(sec => {
         const pages = otherPages.filter(p => p.section_id === sec.id).sort((a,b) => a.sort_order - b.sort_order)
         if (pages.length === 0) return null
@@ -49,6 +48,19 @@ export function QuickAccessTab({ navItems, sections, activeNavId, onNavigate, ap
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Quick Info tab ────────────────────────────────────────────
+export function QuickInfoTab({ navItems, appId, userId, onNavigate }) {
+  return (
+    <div style={{ maxWidth:900, margin:'0 auto' }}>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:24, fontWeight:700, fontFamily:'var(--font-display)', letterSpacing:'-0.01em' }}>Quick info</div>
+        <div style={{ fontSize:13, color:'var(--text-3)', marginTop:2 }}>A live snapshot across the app</div>
+      </div>
+      <LiveModules appId={appId} userId={userId} navItems={navItems} onNavigate={onNavigate} />
     </div>
   )
 }

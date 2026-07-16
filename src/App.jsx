@@ -5,7 +5,7 @@ import { TaskManager } from './TaskManager.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
-import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
+import { QuickAccessTab, QuickInfoTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
 import { AuthScreen } from './Auth.jsx'
 import { NavItemModal } from './Modals.jsx'
 import { SettingsPage, UsernameSetup } from './Settings.jsx'
@@ -176,7 +176,10 @@ export default function App() {
     // Overview page tabs
     if (activeNavItem?.label === 'Overview') {
       if (activeTabLabel === 'Quick Access' || pageTabs.length === 0) {
-        return <QuickAccessTab navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} appId={appId} userId={user?.id} />
+        return <QuickAccessTab navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} />
+      }
+      if (activeTabLabel === 'Quick Info') {
+        return <QuickInfoTab navItems={navItems} appId={appId} userId={user?.id} onNavigate={navigateTo} />
       }
       if (activeTabLabel === 'Schedule') {
         const scheduleNav = navItems.find(i => i.label === 'Schedule')
