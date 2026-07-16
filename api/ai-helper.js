@@ -6,7 +6,7 @@
 // GEMINI_API_KEY in Vercel project settings (Project → Settings →
 // Environment Variables), then redeploy.
 
-const GEMINI_MODEL = 'gemini-2.5-flash' // fast + free-tier friendly
+const GEMINI_MODEL = 'gemini-3.1-flash-lite' // current cost-efficient GA model; replaces the retired gemini-2.5-flash
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
