@@ -99,22 +99,43 @@ async function handleParse(req, res, apiKey, file, context) {
           { inlineData: { mimeType: file.mimeType, data: file.data } },
         ],
       }],
-      generationConfig: { maxOutputTokens: 4000, responseMimeType: 'application/json' },
+      generationConfig: { maxOutputTokens: 8000, responseMimeType: 'application/json' },
     })
-    let parsed
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      const m = text.match(/\{[\s\S]*\}/)
-      if (!m) throw new Error('Could not parse the statement into structured data')
-      parsed = JSON.parse(m[0])
-    }
+    const parsed = parseEntriesJson(text)
     const entries = Array.isArray(parsed.entries) ? parsed.entries.filter(e =>
       ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0
     ).slice(0, 200) : []
-    return res.status(200).json({ entries, summary: parsed.summary || `Found ${entries.length} transactions.` })
+    const summary = parsed.truncated
+      ? `Found ${entries.length} transactions (the statement was long, so this may not be all of them — check against the original).`
+      : (parsed.summary || `Found ${entries.length} transactions.`)
+    return res.status(200).json({ entries, summary })
   } catch (e) {
     console.error('finance parse error', e)
     return res.status(500).json({ error: e.message || 'Failed to read the statement' })
   }
+}
+
+// Parses the model's JSON response, repairing truncated output (the model
+// can be cut off mid-array on long statements) by dropping the last
+// incomplete object rather than failing the whole import.
+function parseEntriesJson(text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    // Fall through to repair
+  }
+  const m = text.match(/\{[\s\S]*/)
+  let candidate = m ? m[0] : text
+  // Try trimming back to the last complete "}," or "}" before the cut point,
+  // then close off the array/object.
+  const lastGoodEntry = Math.max(candidate.lastIndexOf('},'), candidate.lastIndexOf('}]'))
+  if (lastGoodEntry !== -1) {
+    candidate = candidate.slice(0, lastGoodEntry + 1) + ']}'
+    try {
+      const repaired = JSON.parse(candidate)
+      repaired.truncated = true
+      return repaired
+    } catch { /* still broken, give up below */ }
+  }
+  throw new Error('Could not parse the statement into structured data (response may have been too long — try a shorter document or fewer pages)')
 }
