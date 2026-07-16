@@ -182,41 +182,6 @@ export async function runFunctionCall(fc, { appId, userId, state }) {
         return { ok: true, summary: 'Deleted finance entry' }
       }
 
-      // ── Habits ───────────────────────────────────────────
-      case 'add_habit': {
-        if (!args.name?.trim()) throw new Error('Missing habit name')
-        const { data, error } = await supabase.from('habits').insert({
-          app_id: appId, user_id: userId, name: args.name.trim(),
-        }).select().single()
-        if (error) throw error
-        return { ok: true, summary: `Added habit "${args.name.trim()}"`, data }
-      }
-      case 'check_habit': {
-        if (!args.id) throw new Error('Missing habit id')
-        const date = args.date || new Date().toISOString().slice(0, 10)
-        const done = args.done !== false
-        const { data: habit } = await supabase.from('habits').select('name').eq('id', args.id).single()
-        if (done) {
-          const { error } = await supabase.from('habit_checks').upsert(
-            { habit_id: args.id, user_id: userId, check_date: date },
-            { onConflict: 'habit_id,check_date' }
-          )
-          if (error) throw error
-          return { ok: true, summary: `Marked "${habit?.name || args.id}" done for ${date}` }
-        } else {
-          const { error } = await supabase.from('habit_checks').delete().eq('habit_id', args.id).eq('check_date', date)
-          if (error) throw error
-          return { ok: true, summary: `Unmarked "${habit?.name || args.id}" for ${date}` }
-        }
-      }
-      case 'delete_habit': {
-        if (!args.id) throw new Error('Missing habit id')
-        const { data: existing } = await supabase.from('habits').select('name').eq('id', args.id).single()
-        const { error } = await supabase.from('habits').delete().eq('id', args.id)
-        if (error) throw error
-        return { ok: true, summary: `Deleted habit "${existing?.name || args.id}"` }
-      }
-
       default:
         return { ok: false, summary: `Unknown action requested: ${name}` }
     }

@@ -18,7 +18,6 @@ import { Battleship } from './Battleship.jsx'
 import { AIHelper } from './AIHelper.jsx'
 import { Knowledge } from './Knowledge.jsx'
 import { Finance } from './Finance.jsx'
-import { Habits } from './Habits.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -177,7 +176,7 @@ export default function App() {
     // Overview page tabs
     if (activeNavItem?.label === 'Overview') {
       if (activeTabLabel === 'Quick Access' || pageTabs.length === 0) {
-        return <QuickAccessTab navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} />
+        return <QuickAccessTab navItems={navItems} sections={sections} activeNavId={activeNav} onNavigate={navigateTo} appId={appId} userId={user?.id} />
       }
       if (activeTabLabel === 'Schedule') {
         const scheduleNav = navItems.find(i => i.label === 'Schedule')
@@ -199,7 +198,6 @@ export default function App() {
     if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} onDataChanged={refreshState} />
     if (activeNavItem?.label === 'Knowledge') return <Knowledge appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Finance') return <Finance appId={appId} userId={user?.id} />
-    if (activeNavItem?.label === 'Habits') return <Habits appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />
@@ -323,7 +321,9 @@ export default function App() {
             ? {padding:0, overflow:'hidden'}
             : undefined
         }>
-          {renderContent()}
+          <div key={`${activeNav}-${activeTabId || ''}`} className="page-anim" style={{ height: '100%' }}>
+            {renderContent()}
+          </div>
           {/* Persistent game mounts inside content — inset:0 fills content area only */}
           {navItems.some(i => i.label === 'Snake') && (
             <div style={{

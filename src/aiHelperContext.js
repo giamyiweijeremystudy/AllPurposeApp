@@ -90,22 +90,5 @@ export async function buildAppContext(appId, userId, state) {
     }
   } catch (e) { /* finance_entries table may not exist yet — ignore */ }
 
-  try {
-    if (userId) {
-      const { data: habits } = await supabase
-        .from('habits').select('id,name').eq('app_id', appId).eq('user_id', userId)
-      if (habits?.length) {
-        const today = new Date().toISOString().slice(0, 10)
-        const { data: todayChecks } = await supabase
-          .from('habit_checks').select('habit_id').eq('user_id', userId).eq('check_date', today)
-        const doneToday = new Set((todayChecks || []).map(c => c.habit_id))
-        parts.push(
-          `Habits:\n` +
-          habits.map(h => `- [id:${h.id}] ${h.name}${doneToday.has(h.id) ? ' (done today)' : ' (not done today)'}`).join('\n')
-        )
-      }
-    }
-  } catch (e) { /* habits tables may not exist yet — ignore */ }
-
   return parts.join('\n\n')
 }

@@ -205,30 +205,6 @@ const TOOLS = [{
       description: 'Delete a finance entry.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
-    // ── Habits ─────────────────────────────────────────────
-    {
-      name: 'add_habit',
-      description: 'Create a new daily habit to track.',
-      parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' } }, required: ['name'] },
-    },
-    {
-      name: 'check_habit',
-      description: "Mark a habit as done (or not done) for a date. Use done:true to check it off, done:false to un-check.",
-      parameters: {
-        type: 'OBJECT',
-        properties: {
-          id: ID_PARAM,
-          date: { type: 'STRING', description: 'YYYY-MM-DD, optional — defaults to today' },
-          done: { type: 'BOOLEAN', description: 'true to mark done, false to unmark. Defaults to true.' },
-        },
-        required: ['id'],
-      },
-    },
-    {
-      name: 'delete_habit',
-      description: 'Delete a habit and its check history.',
-      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
-    },
   ],
 }]
 
