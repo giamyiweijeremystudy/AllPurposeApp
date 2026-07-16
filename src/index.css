@@ -594,3 +594,16 @@ button, input, select, textarea { font-family: inherit; }
     font-size: 10px;
   }
 }
+
+/* ════════════════════════════════════════
+   PREVENT MOBILE ZOOM ON INPUT FOCUS
+   iOS Safari auto-zooms the page (making it look like the "screen
+   expands") whenever a focused text field has font-size under 16px.
+   Forcing 16px on all text inputs on mobile stops that entirely.
+   !important is needed because many components set font-size inline.
+════════════════════════════════════════ */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
