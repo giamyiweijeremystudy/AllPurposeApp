@@ -193,7 +193,7 @@ export default function App() {
       }} />
     }
     if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
-    if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} />
+    if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} onDataChanged={refreshState} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />

@@ -21,14 +21,14 @@ export async function buildAppContext(appId, userId, state) {
   try {
     if (userId) {
       const { data: tasks } = await supabase
-        .from('tasks').select('title,completed,due_at')
+        .from('tasks').select('title,completed,due_date')
         .eq('app_id', appId).eq('user_id', userId).order('sort_order')
       if (tasks?.length) {
         const open = tasks.filter(t => !t.completed)
         const done = tasks.filter(t => t.completed)
         parts.push(
           `Tasks (${open.length} open, ${done.length} completed):\n` +
-          open.slice(0, 40).map(t => `- [ ] ${t.title}${t.due_at ? ` (due ${t.due_at.slice(0, 10)})` : ''}`).join('\n')
+          open.slice(0, 40).map(t => `- [ ] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ''}`).join('\n')
         )
       }
     }

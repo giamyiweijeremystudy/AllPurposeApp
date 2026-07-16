@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { buildAppContext } from './aiHelperContext.js'
+import { runFunctionCall } from './aiHelperActions.js'
 
-export function AIHelper({ appId, userId, state }) {
+export function AIHelper({ appId, userId, state, onDataChanged }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "Hi! I can read your tasks, upcoming events, and notes, and help you plan, summarize, or draft things. What do you need?" }
+    { role: 'assistant', content: "Hi! I can read your tasks, upcoming events, and notes, and I can add tasks, pages, notes, or calendar events for you directly — just ask." }
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -13,6 +14,21 @@ export function AIHelper({ appId, userId, state }) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, sending])
+
+  const callApi = async (nextMessages, pendingFunctionResults, context) => {
+    const res = await fetch('/api/ai-helper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+        context,
+        pendingFunctionResults,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || 'Something went wrong')
+    return data
+  }
 
   const send = async () => {
     const text = input.trim()
@@ -24,17 +40,22 @@ export function AIHelper({ appId, userId, state }) {
     setSending(true)
     try {
       const context = await buildAppContext(appId, userId, state)
-      const res = await fetch('/api/ai-helper', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
-          context,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Something went wrong')
-      setMessages(m => [...m, { role: 'assistant', content: data.text || '(no response)' }])
+      let data = await callApi(nextMessages, null, context)
+
+      // If the model asked to run any actions, execute them for real against
+      // Supabase, then send the results back for a final natural-language reply.
+      if (data.functionCalls?.length) {
+        const results = []
+        for (const fc of data.functionCalls) {
+          const result = await runFunctionCall(fc, { appId, userId, state })
+          results.push({ name: fc.name, args: fc.args, result })
+          setMessages(m => [...m, { role: 'assistant', content: (result.ok ? '✅ ' : '⚠️ ') + result.summary }])
+        }
+        if (results.some(r => r.result.ok)) onDataChanged?.()
+        data = await callApi(nextMessages, results, context)
+      }
+
+      if (data.text) setMessages(m => [...m, { role: 'assistant', content: data.text }])
     } catch (e) {
       setError(e.message || 'Failed to reach the AI helper')
     } finally {
@@ -85,7 +106,7 @@ export function AIHelper({ appId, userId, state }) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Ask about your tasks, schedule, or ask me to draft something…"
+          placeholder="Ask about your tasks, or ask me to add a task, page, note, or event…"
           rows={1}
           style={{
             flex: 1, resize: 'none', border: '1px solid var(--border)', borderRadius: 10,
