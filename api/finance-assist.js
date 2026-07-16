@@ -6,6 +6,8 @@
 //
 // Requires GEMINI_API_KEY in Vercel env (same key as the other endpoints).
 
+import { PDFDocument } from 'pdf-lib'
+
 const GEMINI_MODEL = 'gemini-3.1-flash-lite'
 
 export const config = { api: { bodyParser: { sizeLimit: '12mb' } } }
@@ -23,7 +25,7 @@ export default async function handler(req, res) {
   const { mode, messages, context, file } = req.body || {}
 
   if (mode === 'parse') {
-    return handleParse(req, res, apiKey, file, context)
+    return handleParse(req, res, apiKey, file)
   }
   return handleChat(req, res, apiKey, messages, context)
 }
@@ -68,7 +70,56 @@ async function handleChat(req, res, apiKey, messages, context) {
   }
 }
 
-async function handleParse(req, res, apiKey, file, context) {
+const CATEGORIES = 'Food, Transport, Housing, Shopping, Entertainment, Health, Education, Salary, Other'
+
+function buildPrompt(isPartial) {
+  return [
+    "You are reading a financial statement (bank/card statement or receipt)" + (isPartial ? ", or a portion of one — some transactions before/after this excerpt may be missing, that's expected, just extract what's visible here." : "."),
+    "Extract every transaction you can identify. For each, output kind ('expense' or 'income'), amount (positive number), a best-fit category from this list: " + CATEGORIES + ", a short description (merchant/payee), and entry_date in YYYY-MM-DD.",
+    "Respond with ONLY valid minified JSON, no markdown, no preamble, in exactly this shape:",
+    '{"entries":[{"kind":"expense","amount":12.50,"category":"Food","description":"Cafe","entry_date":"2026-01-05"}],"summary":"one short sentence"}',
+    "If a date's year is ambiguous, infer it from context or use the current year. If you cannot read any transactions, return an empty entries array with a summary explaining why.",
+  ].join(' ')
+}
+
+async function parseChunk(apiKey, mimeType, base64Data, isPartial) {
+  const text = await callGemini(apiKey, {
+    contents: [{
+      role: 'user',
+      parts: [{ text: buildPrompt(isPartial) }, { inlineData: { mimeType, data: base64Data } }],
+    }],
+    generationConfig: { maxOutputTokens: 8000, responseMimeType: 'application/json' },
+  })
+  return parseEntriesJson(text)
+}
+
+// Splits a base64-encoded PDF into two halves by page count, so each half
+// is small enough that Gemini can fully extract it without hitting the
+// output token cap and truncating mid-array.
+async function splitPdfInHalf(base64Data) {
+  const bytes = Buffer.from(base64Data, 'base64')
+  const src = await PDFDocument.load(bytes)
+  const pageCount = src.getPageCount()
+  if (pageCount < 2) return null // nothing to split
+
+  const mid = Math.ceil(pageCount / 2)
+  const [firstDoc, secondDoc] = await Promise.all([PDFDocument.create(), PDFDocument.create()])
+
+  const firstIdx = Array.from({ length: mid }, (_, i) => i)
+  const secondIdx = Array.from({ length: pageCount - mid }, (_, i) => i + mid)
+
+  const [firstPages, secondPages] = await Promise.all([
+    firstDoc.copyPages(src, firstIdx),
+    secondDoc.copyPages(src, secondIdx),
+  ])
+  firstPages.forEach(p => firstDoc.addPage(p))
+  secondPages.forEach(p => secondDoc.addPage(p))
+
+  const [firstBytes, secondBytes] = await Promise.all([firstDoc.save(), secondDoc.save()])
+  return [Buffer.from(firstBytes).toString('base64'), Buffer.from(secondBytes).toString('base64')]
+}
+
+async function handleParse(req, res, apiKey, file) {
   if (!file?.data || !file?.mimeType) {
     return res.status(400).json({ error: 'file with data (base64) and mimeType is required' })
   }
@@ -81,33 +132,39 @@ async function handleParse(req, res, apiKey, file, context) {
     return res.status(400).json({ error: 'File is too large (max ~10MB)' })
   }
 
-  const categories = 'Food, Transport, Housing, Shopping, Entertainment, Health, Education, Salary, Other'
-  const prompt = [
-    "You are reading a financial statement (bank/card statement or receipt).",
-    "Extract every transaction you can identify. For each, output kind ('expense' or 'income'), amount (positive number), a best-fit category from this list: " + categories + ", a short description (merchant/payee), and entry_date in YYYY-MM-DD.",
-    "Respond with ONLY valid minified JSON, no markdown, no preamble, in exactly this shape:",
-    '{"entries":[{"kind":"expense","amount":12.50,"category":"Food","description":"Cafe","entry_date":"2026-01-05"}],"summary":"one short sentence"}',
-    "If a date's year is ambiguous, infer it from context or use the current year. If you cannot read any transactions, return an empty entries array with a summary explaining why.",
-  ].join(' ')
-
   try {
-    const text = await callGemini(apiKey, {
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType: file.mimeType, data: file.data } },
-        ],
-      }],
-      generationConfig: { maxOutputTokens: 8000, responseMimeType: 'application/json' },
-    })
-    const parsed = parseEntriesJson(text)
-    const entries = Array.isArray(parsed.entries) ? parsed.entries.filter(e =>
-      ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0
-    ).slice(0, 200) : []
-    const summary = parsed.truncated
-      ? `Found ${entries.length} transactions (the statement was long, so this may not be all of them — check against the original).`
-      : (parsed.summary || `Found ${entries.length} transactions.`)
+    let halves = null
+    if (file.mimeType === 'application/pdf') {
+      try { halves = await splitPdfInHalf(file.data) }
+      catch (e) { console.error('pdf split failed, falling back to single pass', e); halves = null }
+    }
+
+    let entries, summary, wasTruncated
+
+    if (halves) {
+      // Run both halves concurrently and merge — each half is small enough
+      // to come back complete rather than truncated.
+      const [a, b] = await Promise.all([
+        parseChunk(apiKey, file.mimeType, halves[0], true),
+        parseChunk(apiKey, file.mimeType, halves[1], true),
+      ])
+      const entriesA = Array.isArray(a.entries) ? a.entries : []
+      const entriesB = Array.isArray(b.entries) ? b.entries : []
+      entries = [...entriesA, ...entriesB]
+      wasTruncated = !!a.truncated || !!b.truncated
+      summary = `Found ${entries.length} transactions across the statement (processed in two parts).`
+    } else {
+      const parsed = await parseChunk(apiKey, file.mimeType, file.data, false)
+      entries = Array.isArray(parsed.entries) ? parsed.entries : []
+      wasTruncated = !!parsed.truncated
+      summary = parsed.summary || `Found ${entries.length} transactions.`
+    }
+
+    entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 400)
+    if (wasTruncated) {
+      summary = `Found ${entries.length} transactions (part of the statement was still long enough to get cut off — check against the original to be safe).`
+    }
+
     return res.status(200).json({ entries, summary })
   } catch (e) {
     console.error('finance parse error', e)
