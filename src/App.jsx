@@ -7,6 +7,7 @@ import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
 import { QuickAccessTab, ScheduleSummaryTab, FilesSummaryTab } from './MainDashboard.jsx'
 import { AuthScreen } from './Auth.jsx'
+import { NavItemModal } from './Modals.jsx'
 import { SettingsPage, UsernameSetup } from './Settings.jsx'
 import { supabase } from './supabase.js'
 import { Wordle } from './Wordle.jsx'
@@ -27,6 +28,7 @@ export default function App() {
   const [user, setUser] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showAddPage, setShowAddPage] = useState(false)
   const [needsUsername, setNeedsUsername] = useState(false)
   const [toast, setToast] = useState({ msg: '', type: '' })
   const toastTimer = useRef(null)
@@ -94,6 +96,18 @@ export default function App() {
   const navigateTo = (id) => {
     setActiveNav(id)
     setMobileNavOpen(false)
+  }
+
+  const refreshState = async () => {
+    try {
+      const s = await loadState()
+      setState(s)
+      return s
+    } catch (e) {
+      console.error(e)
+      showToast('Failed to refresh', 'error')
+      return null
+    }
   }
 
   // Auth gate
@@ -230,6 +244,12 @@ export default function App() {
               </div>
             )
           })}
+          <button onClick={() => setShowAddPage(true)}
+            className={`nav-item ${collapsed ? 'nav-item--collapsed' : ''}`}
+            style={{ color:'var(--text-3)' }} title="Add page">
+            <i className="ti ti-plus" style={{ fontSize:16, flexShrink:0 }} />
+            {!collapsed && <span className="nav-item-label">Add page</span>}
+          </button>
         </div>
       </aside>
 
@@ -325,6 +345,18 @@ export default function App() {
           user={user} profile={profile}
           onClose={() => setShowSettings(false)}
           onProfileUpdate={p => setProfile(p)}
+        />
+      )}
+      {showAddPage && (
+        <NavItemModal
+          appId={appId}
+          sections={sections}
+          onClose={() => setShowAddPage(false)}
+          onSave={async ({ item }) => {
+            await refreshState()
+            if (item) navigateTo(item.id)
+            showToast('Page added')
+          }}
         />
       )}
       <Toast msg={toast.msg} type={toast.type} />
