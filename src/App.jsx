@@ -14,6 +14,7 @@ import { Tetris } from './Tetris.jsx'
 import { Hanoi } from './Hanoi.jsx'
 import { Snake } from './Snake.jsx'
 import { Battleship } from './Battleship.jsx'
+import { AIHelper } from './AIHelper.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -178,6 +179,7 @@ export default function App() {
       }} />
     }
     if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
+    if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />
