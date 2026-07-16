@@ -44,7 +44,7 @@ const CHAT_TOOLS = [{
   ],
 }]
 
-export const config = { api: { bodyParser: { sizeLimit: '12mb' } } }
+export const config = { api: { bodyParser: { sizeLimit: '12mb' } }, maxDuration: 60 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -162,30 +162,33 @@ async function parseChunk(apiKey, { mimeType, base64Data, textData }, isPartial)
   return parseEntriesJson(text)
 }
 
-// Splits a base64-encoded PDF into two halves by page count, so each half
-// is small enough that Gemini can fully extract it without hitting the
-// output token cap and truncating mid-array.
-async function splitPdfInHalf(base64Data) {
+// Splits a base64-encoded PDF into N single-page (or few-page) chunks so
+// each request to Gemini is small enough to come back complete rather than
+// truncating mid-array — a fixed two-way split still wasn't fine-grained
+// enough for statements with 100+ transactions.
+const MAX_CHUNKS = 12 // cap concurrent Gemini calls for very long statements
+
+async function splitPdfIntoChunks(base64Data) {
   const bytes = Buffer.from(base64Data, 'base64')
   const src = await PDFDocument.load(bytes)
   const pageCount = src.getPageCount()
   if (pageCount < 2) return null // nothing to split
 
-  const mid = Math.ceil(pageCount / 2)
-  const [firstDoc, secondDoc] = await Promise.all([PDFDocument.create(), PDFDocument.create()])
+  const pagesPerChunk = Math.max(1, Math.ceil(pageCount / MAX_CHUNKS))
+  const chunkCount = Math.ceil(pageCount / pagesPerChunk)
 
-  const firstIdx = Array.from({ length: mid }, (_, i) => i)
-  const secondIdx = Array.from({ length: pageCount - mid }, (_, i) => i + mid)
-
-  const [firstPages, secondPages] = await Promise.all([
-    firstDoc.copyPages(src, firstIdx),
-    secondDoc.copyPages(src, secondIdx),
-  ])
-  firstPages.forEach(p => firstDoc.addPage(p))
-  secondPages.forEach(p => secondDoc.addPage(p))
-
-  const [firstBytes, secondBytes] = await Promise.all([firstDoc.save(), secondDoc.save()])
-  return [Buffer.from(firstBytes).toString('base64'), Buffer.from(secondBytes).toString('base64')]
+  const chunks = []
+  for (let c = 0; c < chunkCount; c++) {
+    const start = c * pagesPerChunk
+    const end = Math.min(pageCount, start + pagesPerChunk)
+    const idx = Array.from({ length: end - start }, (_, i) => start + i)
+    const doc = await PDFDocument.create()
+    const pages = await doc.copyPages(src, idx)
+    pages.forEach(p => doc.addPage(p))
+    const outBytes = await doc.save()
+    chunks.push(Buffer.from(outBytes).toString('base64'))
+  }
+  return chunks
 }
 
 async function handleParse(req, res, apiKey, file) {
@@ -202,7 +205,7 @@ async function handleParse(req, res, apiKey, file) {
     try {
       const parsed = await parseChunk(apiKey, { textData: file.text }, false)
       let entries = Array.isArray(parsed.entries) ? parsed.entries : []
-      entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 400)
+      entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 1000)
       let summary = parsed.summary || `Found ${entries.length} transactions.`
       if (parsed.truncated) summary = `Found ${entries.length} transactions (the file was long enough to get cut off — check against the original to be safe).`
       return res.status(200).json({ entries, summary })
@@ -222,26 +225,23 @@ async function handleParse(req, res, apiKey, file) {
   }
 
   try {
-    let halves = null
+    let chunks = null
     if (file.mimeType === 'application/pdf') {
-      try { halves = await splitPdfInHalf(file.data) }
-      catch (e) { console.error('pdf split failed, falling back to single pass', e); halves = null }
+      try { chunks = await splitPdfIntoChunks(file.data) }
+      catch (e) { console.error('pdf split failed, falling back to single pass', e); chunks = null }
     }
 
     let entries, summary, wasTruncated
 
-    if (halves) {
-      // Run both halves concurrently and merge — each half is small enough
+    if (chunks) {
+      // Run every chunk concurrently and merge — each chunk is small enough
       // to come back complete rather than truncated.
-      const [a, b] = await Promise.all([
-        parseChunk(apiKey, { mimeType: file.mimeType, base64Data: halves[0] }, true),
-        parseChunk(apiKey, { mimeType: file.mimeType, base64Data: halves[1] }, true),
-      ])
-      const entriesA = Array.isArray(a.entries) ? a.entries : []
-      const entriesB = Array.isArray(b.entries) ? b.entries : []
-      entries = [...entriesA, ...entriesB]
-      wasTruncated = !!a.truncated || !!b.truncated
-      summary = `Found ${entries.length} transactions across the statement (processed in two parts).`
+      const results = await Promise.all(
+        chunks.map(c => parseChunk(apiKey, { mimeType: file.mimeType, base64Data: c }, true))
+      )
+      entries = results.flatMap(r => Array.isArray(r.entries) ? r.entries : [])
+      wasTruncated = results.some(r => r.truncated)
+      summary = `Found ${entries.length} transactions across the statement (processed in ${chunks.length} parts).`
     } else {
       const parsed = await parseChunk(apiKey, { mimeType: file.mimeType, base64Data: file.data }, false)
       entries = Array.isArray(parsed.entries) ? parsed.entries : []
@@ -249,7 +249,7 @@ async function handleParse(req, res, apiKey, file) {
       summary = parsed.summary || `Found ${entries.length} transactions.`
     }
 
-    entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 400)
+    entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 1000)
     if (wasTruncated) {
       summary = `Found ${entries.length} transactions (part of the statement was still long enough to get cut off — check against the original to be safe).`
     }
