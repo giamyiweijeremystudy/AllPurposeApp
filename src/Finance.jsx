@@ -44,6 +44,8 @@ function rangeLabel(period, anchor) {
   if (period === 'month') return start.toLocaleDateString([], { month: 'long', year: 'numeric' })
   return String(start.getFullYear())
 }
+function monthKey(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
+function weekKey(d) { return dstr(startOfWeek(d)) }
 
 // Animated number ----------------------------------------------
 function useCountUp(target, ms = 600) {
@@ -71,6 +73,8 @@ export function Finance({ appId, userId }) {
   const [period, setPeriod] = useState('month')
   const [anchor, setAnchor] = useState(new Date())
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [compareOpen, setCompareOpen] = useState(false)
   const [form, setForm] = useState({ kind: 'expense', amount: '', category: 'Food', description: '', entry_date: todayStr() })
   const [adding, setAdding] = useState(false)
 
@@ -98,6 +102,41 @@ export function Finance({ appId, userId }) {
 
   // Time-series buckets for the bar chart
   const series = useMemo(() => buildSeries(period, anchor, inRange), [period, anchor, inRange])
+
+  // Picker option lists — always include the current period, plus any period that has entries
+  const monthOptions = useMemo(() => {
+    const set = new Set(entries.map(e => e.entry_date.slice(0, 7)))
+    set.add(monthKey(new Date()))
+    return [...set].sort().reverse()
+  }, [entries])
+  const yearOptions = useMemo(() => {
+    const set = new Set(entries.map(e => e.entry_date.slice(0, 4)))
+    set.add(String(new Date().getFullYear()))
+    return [...set].sort().reverse()
+  }, [entries])
+  const weekOptions = useMemo(() => {
+    const set = new Map()
+    for (const e of entries) { const wk = weekKey(new Date(e.entry_date + 'T00:00:00')); set.set(wk, wk) }
+    set.set(weekKey(new Date()), weekKey(new Date()))
+    return [...set.keys()].sort().reverse()
+  }, [entries])
+
+  // Last 6 months of expense totals, for the comparison chart
+  const monthComparison = useMemo(() => {
+    const months = []
+    const a = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(a.getFullYear(), a.getMonth() - i, 1)
+      months.push({ key: monthKey(d), label: d.toLocaleDateString([], { month: 'short' }), value: 0 })
+    }
+    for (const e of entries) {
+      if (e.kind !== 'expense') continue
+      const k = e.entry_date.slice(0, 7)
+      const b = months.find(m => m.key === k)
+      if (b) b.value += Number(e.amount)
+    }
+    return months
+  }, [entries])
 
   const animIncome = useCountUp(totals.income)
   const animExpense = useCountUp(totals.expense)
@@ -137,6 +176,13 @@ export function Finance({ appId, userId }) {
           ))}
         </div>
         <div style={{ flex: 1 }} />
+        <button onClick={() => setCompareOpen(v => !v)} style={{
+          display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px',
+          background: compareOpen ? 'var(--accent-soft)' : 'var(--bg)', color: compareOpen ? 'var(--accent)' : 'var(--text-2)',
+          fontSize: 13, fontWeight: 600, cursor: 'pointer',
+        }}>
+          <i className="ti ti-chart-bar" /> Compare
+        </button>
         <button onClick={() => setAssistantOpen(true)} style={{
           display: 'flex', alignItems: 'center', gap: 6, border: 'none', borderRadius: 10, padding: '9px 14px',
           background: 'var(--accent-grad)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--glow)',
@@ -145,11 +191,27 @@ export function Finance({ appId, userId }) {
         </button>
       </div>
 
-      {/* Range nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+      {compareOpen && <MonthCompare data={monthComparison} />}
+
+      {/* Range nav with jump-to picker */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
         <button onClick={() => setAnchor(a => shiftAnchor(period, a, -1))} style={navBtn}><i className="ti ti-chevron-left" /></button>
-        <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', minWidth: 160, textAlign: 'center' }}>{rangeLabel(period, anchor)}</div>
+        <button onClick={() => setPickerOpen(v => !v)} style={{
+          border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', minWidth: 160, justifyContent: 'center', color: 'var(--text)',
+        }}>
+          {rangeLabel(period, anchor)} <i className="ti ti-chevron-down" style={{ fontSize: 13, color: 'var(--text-3)', transform: pickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+        </button>
         <button onClick={() => setAnchor(a => shiftAnchor(period, a, 1))} style={navBtn}><i className="ti ti-chevron-right" /></button>
+
+        {pickerOpen && (
+          <PeriodPicker
+            period={period} anchor={anchor}
+            monthOptions={monthOptions} yearOptions={yearOptions} weekOptions={weekOptions}
+            onPick={(d) => { setAnchor(d); setPickerOpen(false) }}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
       </div>
 
       {/* Summary cards */}
@@ -322,3 +384,67 @@ function DonutChart({ byCategory, total }) {
 
 const inp = { border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13.5, background: 'var(--bg)', color: 'var(--text)' }
 const navBtn = { border: '1px solid var(--border)', background: 'var(--bg)', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', color: 'var(--text-2)', fontSize: 15 }
+
+// Dropdown / calendar-style jump-to picker for week, month, or year -----
+function PeriodPicker({ period, anchor, monthOptions, yearOptions, weekOptions, onPick, onClose }) {
+  const current = period === 'year' ? String(new Date(anchor).getFullYear()) : period === 'month' ? monthKey(new Date(anchor)) : weekKey(new Date(anchor))
+  const options = period === 'year' ? yearOptions : period === 'month' ? monthOptions : weekOptions
+
+  const labelFor = (key) => {
+    if (period === 'year') return key
+    if (period === 'month') { const [y, m] = key.split('-'); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString([], { month: 'long', year: 'numeric' }) }
+    const s = new Date(key + 'T00:00:00'); const e = new Date(s); e.setDate(s.getDate() + 6)
+    return `${s.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+  }
+  const toDate = (key) => {
+    if (period === 'year') return new Date(Number(key), 0, 1)
+    if (period === 'month') { const [y, m] = key.split('-'); return new Date(Number(y), Number(m) - 1, 1) }
+    return new Date(key + 'T00:00:00')
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+      <div style={{
+        position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, zIndex: 41,
+        background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)',
+        padding: 6, minWidth: 200, maxHeight: 260, overflowY: 'auto', animation: 'module-enter 0.18s var(--ease-out)',
+      }}>
+        {options.map(key => (
+          <button key={key} onClick={() => onPick(toDate(key))} style={{
+            display: 'block', width: '100%', textAlign: 'left', border: 'none', borderRadius: 8, padding: '8px 10px',
+            fontSize: 13, cursor: 'pointer', background: key === current ? 'var(--accent-soft)' : 'transparent',
+            color: key === current ? 'var(--accent)' : 'var(--text)', fontWeight: key === current ? 600 : 400,
+          }}>{labelFor(key)}</button>
+        ))}
+      </div>
+    </>
+  )
+}
+
+// Last-6-months comparison bar chart -------------------------------------
+function MonthCompare({ data }) {
+  const max = Math.max(1, ...data.map(d => d.value))
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 30); return () => clearTimeout(t) }, [])
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, background: 'var(--bg)', boxShadow: 'var(--shadow)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 14 }}>Last 6 months compared</div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130 }}>
+        {data.map((d, i) => (
+          <div key={d.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600, opacity: d.value > 0 ? 1 : 0 }}>{fmtShort(d.value)}</div>
+            <div style={{
+              width: '100%', maxWidth: 40, borderRadius: '6px 6px 0 0',
+              height: mounted ? `${(d.value / max) * 100}%` : '0%', minHeight: d.value > 0 ? 4 : 0,
+              background: i === data.length - 1 ? 'var(--accent-grad)' : 'var(--bg-3)',
+              border: i === data.length - 1 ? 'none' : '1px solid var(--border-2)',
+              transition: `height 0.7s var(--ease-out) ${i * 0.05}s`,
+            }} />
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{d.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
