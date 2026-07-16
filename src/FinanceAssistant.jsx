@@ -48,18 +48,55 @@ const EXCEL_TYPES = [
   'application/vnd.ms-excel', // .xls
 ]
 const TEXT_TYPES = ['text/csv', 'text/plain']
+const DOCX_TYPES = ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+
+// Only "face level" simple spreadsheets are accepted — flat single-sheet
+// tables, no formulas, no merged cells, nothing huge. Anything fancier
+// (multiple tabs, merged headers, formulas, pivot-table-style layouts) is
+// much more likely to be mis-parsed, so we reject it up front with a clear
+// message rather than silently guessing at a complex structure.
+const MAX_EXCEL_ROWS = 2000
+const MAX_EXCEL_COLS = 30
 
 async function excelToCsv(file) {
   const XLSX = await import('xlsx')
   const buf = await file.arrayBuffer()
-  const wb = XLSX.read(buf, { type: 'array' })
-  // Concatenate all sheets as CSV, labelled, in case a statement spans multiple tabs.
-  return wb.SheetNames.map(name => `--- Sheet: ${name} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[name])}`).join('\n\n')
+  const wb = XLSX.read(buf, { type: 'array', cellFormula: true })
+
+  if (wb.SheetNames.length > 1) {
+    throw new Error(`This Excel file has ${wb.SheetNames.length} sheets/tabs. Please upload a simple file with a single sheet of transactions.`)
+  }
+  const sheet = wb.Sheets[wb.SheetNames[0]]
+  if (!sheet) throw new Error('Could not find any data in this Excel file.')
+
+  if (sheet['!merges']?.length) {
+    throw new Error('This Excel file has merged cells, which usually means a formatted report rather than a flat table. Please upload a simple sheet of plain transaction rows.')
+  }
+
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1')
+  const rowCount = range.e.r - range.s.r + 1
+  const colCount = range.e.c - range.s.c + 1
+  if (rowCount > MAX_EXCEL_ROWS) throw new Error(`This sheet has ${rowCount} rows — please keep uploads under ${MAX_EXCEL_ROWS} rows.`)
+  if (colCount > MAX_EXCEL_COLS) throw new Error(`This sheet has ${colCount} columns, which looks like a complex layout rather than a simple transaction table.`)
+
+  const hasFormula = Object.values(sheet).some(cell => cell && typeof cell === 'object' && cell.f)
+  if (hasFormula) {
+    throw new Error('This Excel file contains formulas. Please upload a plain values-only version (e.g. paste-special as values, or export/save as CSV).')
+  }
+
+  return XLSX.utils.sheet_to_csv(sheet)
+}
+
+async function docxToText(file) {
+  const mammoth = await import('mammoth')
+  const buf = await file.arrayBuffer()
+  const { value } = await mammoth.extractRawText({ arrayBuffer: buf })
+  return value
 }
 
 export function FinanceAssistant({ appId, userId, entries, onClose, onEntriesAdded }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "I can answer questions about your finances, add or delete entries directly (I'll always confirm before deleting anything), or read a statement — PDF, JPEG, PNG, CSV, plain text, or Excel — and turn it into categorized entries. Ask away, or upload a file below." }
+    { role: 'assistant', content: "I can answer questions about your finances, add or delete entries directly (I'll always confirm before deleting anything), or read a statement — PDF, JPEG, PNG, CSV, plain text, Word, or a simple single-sheet Excel file — and turn it into categorized entries. Ask away, or upload a file below." }
   ])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -144,6 +181,9 @@ export function FinanceAssistant({ appId, userId, entries, onClose, onEntriesAdd
       if (EXCEL_TYPES.includes(file.type) || /\.(xlsx|xls)$/i.test(file.name)) {
         const csv = await excelToCsv(file)
         body = { mode: 'parse', file: { text: csv, mimeType: 'text/csv' } }
+      } else if (DOCX_TYPES.includes(file.type) || /\.docx$/i.test(file.name)) {
+        const text = await docxToText(file)
+        body = { mode: 'parse', file: { text, mimeType: 'text/plain' } }
       } else if (TEXT_TYPES.includes(file.type) || /\.(csv|txt)$/i.test(file.name)) {
         const text = await readFileAsText(file)
         body = { mode: 'parse', file: { text, mimeType: file.type || 'text/plain' } }
@@ -237,8 +277,8 @@ export function FinanceAssistant({ appId, userId, entries, onClose, onEntriesAdd
         </div>
 
         <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border)' }}>
-          <input ref={fileRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp,text/csv,text/plain,.csv,.txt,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={onFile} style={{ display: 'none' }} />
-          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Upload statement (PDF, image, CSV, text, or Excel)" style={{
+          <input ref={fileRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp,text/csv,text/plain,.csv,.txt,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={onFile} style={{ display: 'none' }} />
+          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Upload statement (PDF, image, CSV, text, Word, or simple Excel)" style={{
             border: '1px solid var(--border)', borderRadius: 10, padding: '0 12px', background: 'var(--bg)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 17,
           }}><i className="ti ti-paperclip" /></button>
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
