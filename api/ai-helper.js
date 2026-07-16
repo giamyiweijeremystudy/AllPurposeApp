@@ -171,6 +171,64 @@ const TOOLS = [{
       description: 'Delete a knowledge base entry.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    // ── Finance ────────────────────────────────────────────
+    {
+      name: 'add_finance_entry',
+      description: "Record an expense or income in the user's finance tracker.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          kind: { type: 'STRING', description: "'expense' or 'income'" },
+          amount: { type: 'NUMBER', description: 'Positive amount' },
+          category: { type: 'STRING', description: 'One of: Food, Transport, Housing, Shopping, Entertainment, Health, Education, Salary, Other. Defaults to Other.' },
+          description: { type: 'STRING', description: 'Optional short description' },
+          entry_date: { type: 'STRING', description: 'YYYY-MM-DD, optional — defaults to today' },
+        },
+        required: ['kind', 'amount'],
+      },
+    },
+    {
+      name: 'update_finance_entry',
+      description: 'Update an existing finance entry.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          id: ID_PARAM,
+          kind: { type: 'STRING' }, amount: { type: 'NUMBER' }, category: { type: 'STRING' },
+          description: { type: 'STRING' }, entry_date: { type: 'STRING' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_finance_entry',
+      description: 'Delete a finance entry.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
+    // ── Habits ─────────────────────────────────────────────
+    {
+      name: 'add_habit',
+      description: 'Create a new daily habit to track.',
+      parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' } }, required: ['name'] },
+    },
+    {
+      name: 'check_habit',
+      description: "Mark a habit as done (or not done) for a date. Use done:true to check it off, done:false to un-check.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          id: ID_PARAM,
+          date: { type: 'STRING', description: 'YYYY-MM-DD, optional — defaults to today' },
+          done: { type: 'BOOLEAN', description: 'true to mark done, false to unmark. Defaults to true.' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_habit',
+      description: 'Delete a habit and its check history.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
   ],
 }]
 

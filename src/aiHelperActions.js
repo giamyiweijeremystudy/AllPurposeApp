@@ -146,6 +146,77 @@ export async function runFunctionCall(fc, { appId, userId, state }) {
         return { ok: true, summary: `Deleted knowledge base entry "${existing?.title || args.id}"` }
       }
 
+      // ── Finance ──────────────────────────────────────────
+      case 'add_finance_entry': {
+        const amount = Number(args.amount)
+        if (!['expense', 'income'].includes(args.kind)) throw new Error("kind must be 'expense' or 'income'")
+        if (!amount || amount <= 0) throw new Error('Amount must be a positive number')
+        const { data, error } = await supabase.from('finance_entries').insert({
+          app_id: appId, user_id: userId, kind: args.kind, amount,
+          category: args.category || 'Other', description: args.description || '',
+          entry_date: args.entry_date || new Date().toISOString().slice(0, 10),
+        }).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Recorded ${args.kind} of ${amount.toFixed(2)} (${data.category})`, data }
+      }
+      case 'update_finance_entry': {
+        if (!args.id) throw new Error('Missing entry id')
+        const patch = {}
+        if (args.kind !== undefined && ['expense', 'income'].includes(args.kind)) patch.kind = args.kind
+        if (args.amount !== undefined) {
+          const amount = Number(args.amount)
+          if (!amount || amount <= 0) throw new Error('Amount must be positive')
+          patch.amount = amount
+        }
+        if (args.category !== undefined) patch.category = args.category
+        if (args.description !== undefined) patch.description = args.description
+        if (args.entry_date !== undefined) patch.entry_date = args.entry_date
+        const { data, error } = await supabase.from('finance_entries').update(patch).eq('id', args.id).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Updated finance entry (${data.kind} ${Number(data.amount).toFixed(2)})`, data }
+      }
+      case 'delete_finance_entry': {
+        if (!args.id) throw new Error('Missing entry id')
+        const { error } = await supabase.from('finance_entries').delete().eq('id', args.id)
+        if (error) throw error
+        return { ok: true, summary: 'Deleted finance entry' }
+      }
+
+      // ── Habits ───────────────────────────────────────────
+      case 'add_habit': {
+        if (!args.name?.trim()) throw new Error('Missing habit name')
+        const { data, error } = await supabase.from('habits').insert({
+          app_id: appId, user_id: userId, name: args.name.trim(),
+        }).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Added habit "${args.name.trim()}"`, data }
+      }
+      case 'check_habit': {
+        if (!args.id) throw new Error('Missing habit id')
+        const date = args.date || new Date().toISOString().slice(0, 10)
+        const done = args.done !== false
+        const { data: habit } = await supabase.from('habits').select('name').eq('id', args.id).single()
+        if (done) {
+          const { error } = await supabase.from('habit_checks').upsert(
+            { habit_id: args.id, user_id: userId, check_date: date },
+            { onConflict: 'habit_id,check_date' }
+          )
+          if (error) throw error
+          return { ok: true, summary: `Marked "${habit?.name || args.id}" done for ${date}` }
+        } else {
+          const { error } = await supabase.from('habit_checks').delete().eq('habit_id', args.id).eq('check_date', date)
+          if (error) throw error
+          return { ok: true, summary: `Unmarked "${habit?.name || args.id}" for ${date}` }
+        }
+      }
+      case 'delete_habit': {
+        if (!args.id) throw new Error('Missing habit id')
+        const { data: existing } = await supabase.from('habits').select('name').eq('id', args.id).single()
+        const { error } = await supabase.from('habits').delete().eq('id', args.id)
+        if (error) throw error
+        return { ok: true, summary: `Deleted habit "${existing?.name || args.id}"` }
+      }
+
       default:
         return { ok: false, summary: `Unknown action requested: ${name}` }
     }

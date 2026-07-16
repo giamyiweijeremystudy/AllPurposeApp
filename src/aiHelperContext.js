@@ -71,5 +71,41 @@ export async function buildAppContext(appId, userId, state) {
     }
   } catch (e) { /* kb_entries table may not exist yet — ignore */ }
 
+  try {
+    if (userId) {
+      const monthStart = new Date(); monthStart.setDate(1)
+      const { data: fin } = await supabase
+        .from('finance_entries').select('id,kind,amount,category,description,entry_date')
+        .eq('app_id', appId).eq('user_id', userId)
+        .gte('entry_date', monthStart.toISOString().slice(0, 10))
+        .order('entry_date', { ascending: false }).limit(50)
+      if (fin?.length) {
+        const income = fin.filter(f => f.kind === 'income').reduce((s, f) => s + Number(f.amount), 0)
+        const expense = fin.filter(f => f.kind === 'expense').reduce((s, f) => s + Number(f.amount), 0)
+        parts.push(
+          `Finance (this month: income ${income.toFixed(2)}, expenses ${expense.toFixed(2)}, net ${(income - expense).toFixed(2)}):\n` +
+          fin.slice(0, 30).map(f => `- [id:${f.id}] ${f.kind} ${Number(f.amount).toFixed(2)} ${f.category}${f.description ? ` — ${f.description}` : ''} (${f.entry_date})`).join('\n')
+        )
+      }
+    }
+  } catch (e) { /* finance_entries table may not exist yet — ignore */ }
+
+  try {
+    if (userId) {
+      const { data: habits } = await supabase
+        .from('habits').select('id,name').eq('app_id', appId).eq('user_id', userId)
+      if (habits?.length) {
+        const today = new Date().toISOString().slice(0, 10)
+        const { data: todayChecks } = await supabase
+          .from('habit_checks').select('habit_id').eq('user_id', userId).eq('check_date', today)
+        const doneToday = new Set((todayChecks || []).map(c => c.habit_id))
+        parts.push(
+          `Habits:\n` +
+          habits.map(h => `- [id:${h.id}] ${h.name}${doneToday.has(h.id) ? ' (done today)' : ' (not done today)'}`).join('\n')
+        )
+      }
+    }
+  } catch (e) { /* habits tables may not exist yet — ignore */ }
+
   return parts.join('\n\n')
 }
