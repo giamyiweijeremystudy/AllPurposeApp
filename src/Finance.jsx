@@ -76,6 +76,7 @@ export function Finance({ appId, userId }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [filter, setFilter] = useState('all') // 'all' | 'expense' | 'income'
+  const [editMode, setEditMode] = useState(false)
   const [modalEntry, setModalEntry] = useState(null) // null = closed, {} = new, {...entry} = editing
 
   const reload = () => {
@@ -256,10 +257,17 @@ export function Finance({ appId, userId }) {
 
       {/* Entries table */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--bg)', boxShadow: 'var(--shadow)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ fontSize: 12, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, flex: 1 }}>
             Transactions {filter !== 'all' && `· ${filter}`}
           </div>
+          <button onClick={() => setEditMode(v => !v)} style={{
+            display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 11px',
+            background: editMode ? 'var(--accent-soft)' : 'var(--bg-2)', color: editMode ? 'var(--accent)' : 'var(--text-2)',
+            fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <i className={`ti ${editMode ? 'ti-check' : 'ti-pencil'}`} /> {editMode ? 'Done' : 'Edit'}
+          </button>
           <button onClick={() => setModalEntry({})} style={{
             display: 'flex', alignItems: 'center', gap: 5, border: 'none', borderRadius: 8, padding: '6px 11px',
             background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
@@ -275,7 +283,7 @@ export function Finance({ appId, userId }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
               <thead>
                 <tr>
-                  {['Date', 'Description', 'Category', 'Type', 'Amount', ''].map((h, i) => (
+                  {['Date', 'Description', 'Category', 'Type', 'Amount', ...(editMode ? [''] : [])].map((h, i) => (
                     <th key={h || i} style={{
                       textAlign: i === 4 ? 'right' : 'left', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase',
                       letterSpacing: 0.4, fontWeight: 600, padding: '8px 14px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
@@ -285,7 +293,16 @@ export function Finance({ appId, userId }) {
               </thead>
               <tbody>
                 {visibleEntries.map(e => (
-                  <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <tr key={e.id}
+                    onClick={editMode ? () => setModalEntry(e) : undefined}
+                    style={{
+                      borderBottom: '1px solid var(--border)',
+                      cursor: editMode ? 'pointer' : 'default',
+                      background: 'transparent',
+                    }}
+                    onMouseEnter={ev => { if (editMode) ev.currentTarget.style.background = 'var(--bg-2)' }}
+                    onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
+                  >
                     <td style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{e.entry_date}</td>
                     <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description || '—'}</td>
                     <td style={{ padding: '10px 14px', fontSize: 12.5 }}>
@@ -298,14 +315,11 @@ export function Finance({ appId, userId }) {
                     <td style={{ padding: '10px 14px', fontSize: 13.5, fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap', color: e.kind === 'income' ? 'var(--success)' : 'var(--text)' }}>
                       {e.kind === 'income' ? '+' : '−'}{fmtMoney(e.amount)}
                     </td>
-                    <td style={{ padding: '10px 10px', textAlign: 'right' }}>
-                      <button onClick={() => setModalEntry(e)} title="Edit" style={{
-                        border: '1px solid var(--border)', background: 'var(--bg-2)', borderRadius: 7, padding: '5px 9px',
-                        color: 'var(--text-2)', cursor: 'pointer', fontSize: 12.5,
-                      }}>
-                        <i className="ti ti-pencil" />
-                      </button>
-                    </td>
+                    {editMode && (
+                      <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-3)' }}>
+                        <i className="ti ti-chevron-right" style={{ fontSize: 14 }} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
