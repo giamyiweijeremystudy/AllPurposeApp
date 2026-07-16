@@ -18,6 +18,7 @@ import { Battleship } from './Battleship.jsx'
 import { AIHelper } from './AIHelper.jsx'
 import { Knowledge } from './Knowledge.jsx'
 import { Finance } from './Finance.jsx'
+import { Fitness } from './Fitness.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -201,6 +202,7 @@ export default function App() {
     if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} onDataChanged={refreshState} />
     if (activeNavItem?.label === 'Knowledge') return <Knowledge appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Finance') return <Finance appId={appId} userId={user?.id} />
+    if (activeNavItem?.label === 'Fitness') return <Fitness appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />

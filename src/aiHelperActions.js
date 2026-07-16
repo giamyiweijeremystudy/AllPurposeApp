@@ -182,6 +182,28 @@ export async function runFunctionCall(fc, { appId, userId, state }) {
         return { ok: true, summary: 'Deleted finance entry' }
       }
 
+      // ── Fitness ──────────────────────────────────────────
+      case 'log_workout': {
+        const valid = ['pushups', 'situps', 'pullups', 'running', 'cycling', 'strength', 'custom']
+        const exercise = valid.includes(args.exercise) ? args.exercise : 'custom'
+        const num = v => v == null ? null : Number(v)
+        const { data, error } = await supabase.from('workouts').insert({
+          app_id: appId, user_id: userId, exercise,
+          custom_name: args.custom_name || (exercise === 'custom' ? (args.exercise || '') : ''),
+          sets: num(args.sets), reps: num(args.reps), weight_kg: num(args.weight_kg),
+          duration_min: num(args.duration_min), distance_km: num(args.distance_km),
+          performed_at: args.performed_at || new Date().toISOString(), notes: args.notes || '',
+        }).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Logged ${data.custom_name || data.exercise}`, data }
+      }
+      case 'delete_workout': {
+        if (!args.id) throw new Error('Missing workout id')
+        const { error } = await supabase.from('workouts').delete().eq('id', args.id)
+        if (error) throw error
+        return { ok: true, summary: 'Deleted workout' }
+      }
+
       default:
         return { ok: false, summary: `Unknown action requested: ${name}` }
     }

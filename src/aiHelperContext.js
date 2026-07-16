@@ -90,5 +90,27 @@ export async function buildAppContext(appId, userId, state) {
     }
   } catch (e) { /* finance_entries table may not exist yet — ignore */ }
 
+  try {
+    if (userId) {
+      const { data: wo } = await supabase
+        .from('workouts').select('id,exercise,custom_name,performed_at,sets,reps,weight_kg,duration_min,distance_km')
+        .eq('app_id', appId).eq('user_id', userId)
+        .order('performed_at', { ascending: false }).limit(30)
+      if (wo?.length) {
+        parts.push(
+          `Recent workouts:\n` +
+          wo.map(w => {
+            const bits = []
+            if (w.sets && w.reps) bits.push(`${w.sets}x${w.reps}`)
+            if (w.weight_kg) bits.push(`${w.weight_kg}kg`)
+            if (w.distance_km) bits.push(`${Number(w.distance_km).toFixed(1)}km`)
+            if (w.duration_min) bits.push(`${w.duration_min}min`)
+            return `- [id:${w.id}] ${w.performed_at.slice(0, 10)} ${w.custom_name || w.exercise}: ${bits.join(' ') || 'logged'}`
+          }).join('\n')
+        )
+      }
+    }
+  } catch (e) { /* workouts table may not exist yet — ignore */ }
+
   return parts.join('\n\n')
 }

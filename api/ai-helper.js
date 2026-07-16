@@ -205,6 +205,26 @@ const TOOLS = [{
       description: 'Delete a finance entry.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    // ── Fitness ────────────────────────────────────────────
+    {
+      name: 'log_workout',
+      description: "Log a workout on the user's Fitness page.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          exercise: { type: 'STRING', description: 'pushups, situps, pullups, running, cycling, strength, or custom' },
+          custom_name: { type: 'STRING' }, sets: { type: 'NUMBER' }, reps: { type: 'NUMBER' },
+          weight_kg: { type: 'NUMBER' }, duration_min: { type: 'NUMBER' }, distance_km: { type: 'NUMBER' },
+          performed_at: { type: 'STRING', description: 'ISO datetime, optional' }, notes: { type: 'STRING' },
+        },
+        required: ['exercise'],
+      },
+    },
+    {
+      name: 'delete_workout',
+      description: 'Delete a logged workout.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
   ],
 }]
 
