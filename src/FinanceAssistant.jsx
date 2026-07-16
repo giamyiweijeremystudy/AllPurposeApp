@@ -1,0 +1,164 @@
+import { useState, useRef, useEffect } from 'react'
+import { supabase } from './supabase.js'
+
+function fmtMoney(n) { return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+
+// Build a compact snapshot of finance data for the chat context.
+function buildContext(entries) {
+  if (!entries.length) return 'No finance entries yet.'
+  const now = new Date()
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const yearStart = `${now.getFullYear()}-01-01`
+  const sum = (arr, kind) => arr.filter(e => e.kind === kind).reduce((s, e) => s + Number(e.amount), 0)
+  const month = entries.filter(e => e.entry_date >= monthStart)
+  const year = entries.filter(e => e.entry_date >= yearStart)
+  const byCat = {}
+  for (const e of month.filter(e => e.kind === 'expense')) byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount)
+  const lines = [
+    `This month: income ${fmtMoney(sum(month, 'income'))}, expenses ${fmtMoney(sum(month, 'expense'))}.`,
+    `This year: income ${fmtMoney(sum(year, 'income'))}, expenses ${fmtMoney(sum(year, 'expense'))}.`,
+    `This month by category: ${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, a]) => `${c} ${fmtMoney(a)}`).join(', ') || 'none'}.`,
+    `Recent transactions:`,
+    ...entries.slice(0, 40).map(e => `- ${e.entry_date} ${e.kind} ${fmtMoney(e.amount)} ${e.category}${e.description ? ` (${e.description})` : ''}`),
+  ]
+  return lines.join('\n')
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(String(r.result).split(',')[1])
+    r.onerror = () => rej(new Error('Could not read file'))
+    r.readAsDataURL(file)
+  })
+}
+
+export function FinanceAssistant({ appId, userId, entries, onClose, onEntriesAdded }) {
+  const [messages, setMessages] = useState([
+    { role: 'assistant', content: "I can answer questions about your finances, or read a statement (PDF/JPEG/PNG) and turn it into categorized entries. Ask away, or upload a statement below." }
+  ])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [parsed, setParsed] = useState(null) // { entries, summary } pending import
+  const scrollRef = useRef(null)
+  const fileRef = useRef(null)
+
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, busy, parsed])
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || busy) return
+    setInput(''); setError('')
+    const next = [...messages, { role: 'user', content: text }]
+    setMessages(next); setBusy(true)
+    try {
+      const res = await fetch('/api/finance-assist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'chat', messages: next.map(m => ({ role: m.role, content: m.content })), context: buildContext(entries) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Something went wrong')
+      setMessages(m => [...m, { role: 'assistant', content: data.text }])
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setError(''); setParsed(null)
+    setMessages(m => [...m, { role: 'user', content: `📄 Uploaded ${file.name}` }])
+    setBusy(true)
+    try {
+      const data64 = await fileToBase64(file)
+      const res = await fetch('/api/finance-assist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'parse', file: { data: data64, mimeType: file.type } }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Could not read the statement')
+      setMessages(m => [...m, { role: 'assistant', content: data.summary || `Found ${data.entries.length} transactions.` }])
+      if (data.entries?.length) setParsed(data)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  const importParsed = async () => {
+    if (!parsed?.entries?.length) return
+    setBusy(true)
+    const rows = parsed.entries.map(e => ({
+      app_id: appId, user_id: userId, kind: e.kind, amount: Number(e.amount),
+      category: e.category || 'Other', description: e.description || '', entry_date: e.entry_date || new Date().toISOString().slice(0, 10),
+    }))
+    const { error } = await supabase.from('finance_entries').insert(rows)
+    setBusy(false)
+    if (error) { setError(error.message); return }
+    setMessages(m => [...m, { role: 'assistant', content: `✅ Imported ${rows.length} transactions.` }])
+    setParsed(null)
+    onEntriesAdded?.()
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backdropFilter: 'blur(2px)',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg)', width: '100%', maxWidth: 560, height: '85vh', borderRadius: '18px 18px 0 0',
+        display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)', animation: 'module-enter 0.3s var(--ease-out)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+          <i className="ti ti-sparkles" style={{ color: 'var(--accent)' }} />
+          <span style={{ fontWeight: 700, fontFamily: 'var(--font-display)', flex: 1 }}>AI financial assistant</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 20, cursor: 'pointer' }}><i className="ti ti-x" /></button>
+        </div>
+
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{
+              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%',
+              background: m.role === 'user' ? 'var(--accent)' : 'var(--bg-2)', color: m.role === 'user' ? '#fff' : 'var(--text)',
+              borderRadius: 12, padding: '9px 12px', fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+            }}>{m.content}</div>
+          ))}
+          {busy && <div style={{ alignSelf: 'flex-start', color: 'var(--text-3)', fontSize: 13, padding: '4px 8px' }}><i className="ti ti-loader-2 spin" /> Working…</div>}
+          {error && <div style={{ alignSelf: 'flex-start', color: 'var(--danger)', fontSize: 12.5, padding: '4px 8px' }}><i className="ti ti-alert-circle" /> {error}</div>}
+
+          {parsed?.entries?.length > 0 && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: 'var(--bg)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{parsed.entries.length} transactions ready to import</div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {parsed.entries.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-3)', width: 74, flexShrink: 0 }}>{e.entry_date}</span>
+                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.description || e.category}</span>
+                    <span style={{ color: 'var(--text-3)' }}>{e.category}</span>
+                    <span style={{ fontWeight: 600, color: e.kind === 'income' ? 'var(--success)' : 'var(--text)' }}>{e.kind === 'income' ? '+' : '−'}{fmtMoney(e.amount)}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button onClick={importParsed} disabled={busy} style={{ border: 'none', borderRadius: 8, padding: '8px 14px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Import all</button>
+                <button onClick={() => setParsed(null)} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', background: 'transparent', color: 'var(--text)', fontSize: 12.5, cursor: 'pointer' }}>Discard</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border)' }}>
+          <input ref={fileRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={onFile} style={{ display: 'none' }} />
+          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Upload statement" style={{
+            border: '1px solid var(--border)', borderRadius: 10, padding: '0 12px', background: 'var(--bg)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 17,
+          }}><i className="ti ti-paperclip" /></button>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder="Ask about your finances…"
+            style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 13.5, background: 'var(--bg)', color: 'var(--text)' }} />
+          <button onClick={send} disabled={busy || !input.trim()} style={{
+            border: 'none', borderRadius: 10, padding: '0 16px', background: 'var(--accent)', color: '#fff',
+            cursor: busy || !input.trim() ? 'default' : 'pointer', opacity: busy || !input.trim() ? 0.5 : 1, fontSize: 14, fontWeight: 600,
+          }}><i className="ti ti-send" /></button>
+        </div>
+      </div>
+    </div>
+  )
+}

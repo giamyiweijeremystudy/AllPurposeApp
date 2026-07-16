@@ -182,6 +182,35 @@ export async function runFunctionCall(fc, { appId, userId, state }) {
         return { ok: true, summary: 'Deleted finance entry' }
       }
 
+      // ── Investments ──────────────────────────────────────
+      case 'add_investment': {
+        if (!args.name?.trim()) throw new Error('Missing name')
+        const cost = Number(args.cost_basis) || 0
+        const { data, error } = await supabase.from('investments').insert({
+          app_id: appId, user_id: userId, name: args.name.trim(), ticker: (args.ticker || '').toUpperCase(),
+          kind: args.kind || 'stock', quantity: Number(args.quantity) || 0,
+          cost_basis: cost, current_price: Number(args.current_price) || cost,
+        }).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Added holding ${data.ticker || data.name}`, data }
+      }
+      case 'update_investment': {
+        if (!args.id) throw new Error('Missing holding id')
+        const patch = { updated_at: new Date().toISOString() }
+        if (args.quantity !== undefined) patch.quantity = Number(args.quantity)
+        if (args.cost_basis !== undefined) patch.cost_basis = Number(args.cost_basis)
+        if (args.current_price !== undefined) patch.current_price = Number(args.current_price)
+        const { data, error } = await supabase.from('investments').update(patch).eq('id', args.id).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Updated ${data.ticker || data.name}`, data }
+      }
+      case 'delete_investment': {
+        if (!args.id) throw new Error('Missing holding id')
+        const { error } = await supabase.from('investments').delete().eq('id', args.id)
+        if (error) throw error
+        return { ok: true, summary: 'Deleted holding' }
+      }
+
       default:
         return { ok: false, summary: `Unknown action requested: ${name}` }
     }

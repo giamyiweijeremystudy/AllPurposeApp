@@ -90,5 +90,21 @@ export async function buildAppContext(appId, userId, state) {
     }
   } catch (e) { /* finance_entries table may not exist yet — ignore */ }
 
+  try {
+    if (userId) {
+      const { data: inv } = await supabase
+        .from('investments').select('id,name,ticker,quantity,cost_basis,current_price')
+        .eq('app_id', appId).eq('user_id', userId)
+      if (inv?.length) {
+        const value = inv.reduce((s, h) => s + Number(h.quantity) * Number(h.current_price), 0)
+        const cost = inv.reduce((s, h) => s + Number(h.quantity) * Number(h.cost_basis), 0)
+        parts.push(
+          `Investments (portfolio value ${value.toFixed(2)}, cost ${cost.toFixed(2)}, gain ${(value - cost).toFixed(2)}):\n` +
+          inv.map(h => `- [id:${h.id}] ${h.ticker || h.name}: ${Number(h.quantity)} @ cost ${Number(h.cost_basis).toFixed(2)}, now ${Number(h.current_price).toFixed(2)}`).join('\n')
+        )
+      }
+    }
+  } catch (e) { /* investments table may not exist yet — ignore */ }
+
   return parts.join('\n\n')
 }

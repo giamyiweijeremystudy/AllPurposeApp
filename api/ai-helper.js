@@ -205,6 +205,36 @@ const TOOLS = [{
       description: 'Delete a finance entry.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    // ── Investments ────────────────────────────────────────
+    {
+      name: 'add_investment',
+      description: "Add a holding to the user's investment portfolio.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' }, ticker: { type: 'STRING' },
+          kind: { type: 'STRING', description: 'stock, etf, crypto, bond, fund, or other' },
+          quantity: { type: 'NUMBER' },
+          cost_basis: { type: 'NUMBER', description: 'Average cost per unit' },
+          current_price: { type: 'NUMBER', description: 'Current price per unit' },
+        },
+        required: ['name', 'quantity'],
+      },
+    },
+    {
+      name: 'update_investment',
+      description: 'Update a holding (e.g. refresh its current price or quantity).',
+      parameters: {
+        type: 'OBJECT',
+        properties: { id: ID_PARAM, quantity: { type: 'NUMBER' }, cost_basis: { type: 'NUMBER' }, current_price: { type: 'NUMBER' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_investment',
+      description: 'Remove a holding from the portfolio.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
   ],
 }]
 
