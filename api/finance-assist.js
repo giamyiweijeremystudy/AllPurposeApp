@@ -1,14 +1,48 @@
 // Vercel serverless function — AI financial assistant backed by Gemini.
 // Two modes:
-//   mode: 'chat'  → answer questions about the user's finance data
-//   mode: 'parse' → extract transactions from an uploaded statement
-//                   (PDF/JPEG/PNG passed as base64) into structured JSON
+//   mode: 'chat'  → answer questions about the user's finance data, and
+//                   can add or delete entries via tool calls. Deletes are
+//                   never executed here — this function only *requests*
+//                   them; the client always shows a confirmation before
+//                   actually deleting anything.
+//   mode: 'parse' → extract transactions from an uploaded statement.
+//                   Accepts PDF/JPEG/PNG/WebP as base64 (file.data), or
+//                   CSV/plain-text/Excel-converted-to-CSV as plain text
+//                   (file.text) — Excel files are converted to CSV in the
+//                   browser before upload, since Gemini doesn't read .xlsx
+//                   directly.
 //
 // Requires GEMINI_API_KEY in Vercel env (same key as the other endpoints).
 
 import { PDFDocument } from 'pdf-lib'
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite'
+
+const ID_PARAM = { type: 'STRING', description: "The entry's id, taken from the finance data snapshot." }
+const CHAT_TOOLS = [{
+  functionDeclarations: [
+    {
+      name: 'add_finance_entry',
+      description: 'Record a new expense or income directly from the conversation.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          kind: { type: 'STRING', description: "'expense' or 'income'" },
+          amount: { type: 'NUMBER' },
+          category: { type: 'STRING', description: 'Food, Transport, Housing, Shopping, Entertainment, Health, Education, Salary, or Other' },
+          description: { type: 'STRING' },
+          entry_date: { type: 'STRING', description: 'YYYY-MM-DD, optional — defaults to today' },
+        },
+        required: ['kind', 'amount'],
+      },
+    },
+    {
+      name: 'delete_finance_entry',
+      description: 'Delete a specific finance entry by id. The user will always be shown a confirmation before this actually happens, so it is safe to call whenever the user asks to remove/delete a transaction.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
+  ],
+}]
 
 export const config = { api: { bodyParser: { sizeLimit: '12mb' } } }
 
@@ -22,25 +56,30 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server is missing GEMINI_API_KEY. Set it in Vercel project settings.' })
   }
 
-  const { mode, messages, context, file } = req.body || {}
+  const { mode, messages, context, file, pendingFunctionResults } = req.body || {}
 
   if (mode === 'parse') {
     return handleParse(req, res, apiKey, file)
   }
-  return handleChat(req, res, apiKey, messages, context)
+  return handleChat(req, res, apiKey, messages, context, pendingFunctionResults)
 }
 
-async function callGemini(apiKey, body) {
+async function callGeminiRaw(apiKey, body) {
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   )
   const data = await r.json()
   if (!r.ok) throw new Error(data?.error?.message || 'Upstream API error')
+  return data
+}
+
+async function callGemini(apiKey, body) {
+  const data = await callGeminiRaw(apiKey, body)
   return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('\n').trim()
 }
 
-async function handleChat(req, res, apiKey, messages, context) {
+async function handleChat(req, res, apiKey, messages, context, pendingFunctionResults) {
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array is required' })
   }
@@ -50,20 +89,47 @@ async function handleChat(req, res, apiKey, messages, context) {
       return res.status(400).json({ error: 'Each message must be a string under 8000 characters' })
     }
   }
+  if (pendingFunctionResults && (!Array.isArray(pendingFunctionResults) || pendingFunctionResults.length > 10)) {
+    return res.status(400).json({ error: 'Invalid pendingFunctionResults' })
+  }
   const systemInstruction = [
     "You are a financial assistant inside a personal dashboard app.",
-    "Use the finance data snapshot below to answer questions about the user's spending, income, budgets, categories, trends, and profit-vs-spend. Give concrete numbers and short, practical insight. You are not a licensed financial advisor; for investment or tax decisions, add a brief reminder to consult a professional. Be concise; plain text, minimal markdown.",
+    "Use the finance data snapshot below (each entry has an id) to answer questions about the user's spending, income, budgets, categories, trends, and profit-vs-spend. Give concrete numbers and short, practical insight. You are not a licensed financial advisor; for investment or tax decisions, add a brief reminder to consult a professional.",
+    "You can add or delete finance entries directly using the available tools when the user asks — don't tell them to do it manually. Deletions are always confirmed with the user before they happen, so call delete_finance_entry directly rather than asking permission first in text.",
+    "Be concise; plain text, minimal markdown.",
     context ? `\n\n--- Finance data snapshot ---\n${String(context).slice(0, 14000)}` : '',
   ].join(' ')
 
   const contents = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+
+  if (pendingFunctionResults?.length) {
+    contents.push({
+      role: 'model',
+      parts: pendingFunctionResults.map(r => {
+        const part = { functionCall: { name: r.name, args: r.args || {} } }
+        if (r.thoughtSignature) part.thoughtSignature = r.thoughtSignature
+        return part
+      }),
+    })
+    contents.push({
+      role: 'function',
+      parts: pendingFunctionResults.map(r => ({ functionResponse: { name: r.name, response: { result: r.result } } })),
+    })
+  }
+
   try {
-    const text = await callGemini(apiKey, {
+    const raw = await callGeminiRaw(apiKey, {
       contents,
       systemInstruction: { parts: [{ text: systemInstruction }] },
+      tools: CHAT_TOOLS,
       generationConfig: { maxOutputTokens: 1200 },
     })
-    return res.status(200).json({ text: text || '(no response)' })
+    const parts = raw.candidates?.[0]?.content?.parts || []
+    const text = parts.filter(p => p.text).map(p => p.text).join('\n\n').trim()
+    const functionCalls = parts.filter(p => p.functionCall).map(p => ({
+      name: p.functionCall.name, args: p.functionCall.args || {}, thoughtSignature: p.thoughtSignature,
+    }))
+    return res.status(200).json({ text, functionCalls })
   } catch (e) {
     console.error('finance chat error', e)
     return res.status(500).json({ error: e.message || 'Failed to reach the AI service' })
@@ -82,11 +148,14 @@ function buildPrompt(isPartial) {
   ].join(' ')
 }
 
-async function parseChunk(apiKey, mimeType, base64Data, isPartial) {
+async function parseChunk(apiKey, { mimeType, base64Data, textData }, isPartial) {
+  const dataPart = textData !== undefined
+    ? { text: textData }
+    : { inlineData: { mimeType, data: base64Data } }
   const text = await callGemini(apiKey, {
     contents: [{
       role: 'user',
-      parts: [{ text: buildPrompt(isPartial) }, { inlineData: { mimeType, data: base64Data } }],
+      parts: [{ text: buildPrompt(isPartial) }, dataPart],
     }],
     generationConfig: { maxOutputTokens: 8000, responseMimeType: 'application/json' },
   })
@@ -120,12 +189,32 @@ async function splitPdfInHalf(base64Data) {
 }
 
 async function handleParse(req, res, apiKey, file) {
-  if (!file?.data || !file?.mimeType) {
-    return res.status(400).json({ error: 'file with data (base64) and mimeType is required' })
+  const hasBinary = !!(file?.data && file?.mimeType)
+  const hasText = typeof file?.text === 'string' && file.text.trim().length > 0
+  if (!hasBinary && !hasText) {
+    return res.status(400).json({ error: 'file with either data+mimeType (PDF/image) or text (CSV/plain text) is required' })
   }
+
+  if (hasText) {
+    if (file.text.length > 400_000) {
+      return res.status(400).json({ error: 'Text/CSV content is too large (max ~400,000 characters)' })
+    }
+    try {
+      const parsed = await parseChunk(apiKey, { textData: file.text }, false)
+      let entries = Array.isArray(parsed.entries) ? parsed.entries : []
+      entries = entries.filter(e => ['expense', 'income'].includes(e.kind) && Number(e.amount) > 0).slice(0, 400)
+      let summary = parsed.summary || `Found ${entries.length} transactions.`
+      if (parsed.truncated) summary = `Found ${entries.length} transactions (the file was long enough to get cut off — check against the original to be safe).`
+      return res.status(200).json({ entries, summary })
+    } catch (e) {
+      console.error('finance parse (text) error', e)
+      return res.status(500).json({ error: e.message || 'Failed to read the file' })
+    }
+  }
+
   const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
   if (!allowed.includes(file.mimeType)) {
-    return res.status(400).json({ error: 'Only PDF, JPEG, PNG, or WebP statements are supported' })
+    return res.status(400).json({ error: 'Only PDF, JPEG, PNG, WebP, CSV, plain text, or Excel statements are supported' })
   }
   // base64 payload guard (~10MB binary ≈ 13.7MB base64)
   if (file.data.length > 14_000_000) {
@@ -145,8 +234,8 @@ async function handleParse(req, res, apiKey, file) {
       // Run both halves concurrently and merge — each half is small enough
       // to come back complete rather than truncated.
       const [a, b] = await Promise.all([
-        parseChunk(apiKey, file.mimeType, halves[0], true),
-        parseChunk(apiKey, file.mimeType, halves[1], true),
+        parseChunk(apiKey, { mimeType: file.mimeType, base64Data: halves[0] }, true),
+        parseChunk(apiKey, { mimeType: file.mimeType, base64Data: halves[1] }, true),
       ])
       const entriesA = Array.isArray(a.entries) ? a.entries : []
       const entriesB = Array.isArray(b.entries) ? b.entries : []
@@ -154,7 +243,7 @@ async function handleParse(req, res, apiKey, file) {
       wasTruncated = !!a.truncated || !!b.truncated
       summary = `Found ${entries.length} transactions across the statement (processed in two parts).`
     } else {
-      const parsed = await parseChunk(apiKey, file.mimeType, file.data, false)
+      const parsed = await parseChunk(apiKey, { mimeType: file.mimeType, base64Data: file.data }, false)
       entries = Array.isArray(parsed.entries) ? parsed.entries : []
       wasTruncated = !!parsed.truncated
       summary = parsed.summary || `Found ${entries.length} transactions.`
