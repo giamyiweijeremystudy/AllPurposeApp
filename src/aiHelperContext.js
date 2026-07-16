@@ -56,5 +56,20 @@ export async function buildAppContext(appId, userId, state) {
     }
   } catch (e) { /* events table may not exist yet for this app — ignore */ }
 
+  try {
+    if (userId) {
+      const { data: kb } = await supabase
+        .from('kb_entries').select('id,title,content')
+        .eq('app_id', appId).eq('user_id', userId)
+        .order('updated_at', { ascending: false }).limit(30)
+      if (kb?.length) {
+        parts.push(
+          `Knowledge base entries:\n` +
+          kb.map(k => `- [id:${k.id}] ${k.title}: ${(k.content || '').slice(0, 200)}${(k.content || '').length > 200 ? '…' : ''}`).join('\n')
+        )
+      }
+    }
+  } catch (e) { /* kb_entries table may not exist yet — ignore */ }
+
   return parts.join('\n\n')
 }

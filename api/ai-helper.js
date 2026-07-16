@@ -147,6 +147,30 @@ const TOOLS = [{
       description: 'Remove a page from the sidebar.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    // ── Knowledge base entries ─────────────────────────────
+    {
+      name: 'add_kb_entry',
+      description: "Create a new entry in the user's knowledge base / learning notes.",
+      parameters: {
+        type: 'OBJECT',
+        properties: { title: { type: 'STRING' }, content: { type: 'STRING' } },
+        required: ['title', 'content'],
+      },
+    },
+    {
+      name: 'update_kb_entry',
+      description: 'Update the title or content of an existing knowledge base entry.',
+      parameters: {
+        type: 'OBJECT',
+        properties: { id: ID_PARAM, title: { type: 'STRING' }, content: { type: 'STRING' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_kb_entry',
+      description: 'Delete a knowledge base entry.',
+      parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
+    },
   ],
 }]
 

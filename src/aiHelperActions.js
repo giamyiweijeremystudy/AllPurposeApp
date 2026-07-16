@@ -120,6 +120,32 @@ export async function runFunctionCall(fc, { appId, userId, state }) {
         return { ok: true, summary: `Removed page "${existing?.label || args.id}" from the sidebar` }
       }
 
+      // ── Knowledge base ───────────────────────────────────
+      case 'add_kb_entry': {
+        if (!args.title?.trim()) throw new Error('Missing entry title')
+        const { data, error } = await supabase.from('kb_entries').insert({
+          app_id: appId, user_id: userId, title: args.title.trim(), content: args.content || '',
+        }).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Added knowledge base entry "${args.title.trim()}"`, data }
+      }
+      case 'update_kb_entry': {
+        if (!args.id) throw new Error('Missing entry id')
+        const patch = { updated_at: new Date().toISOString() }
+        if (args.title !== undefined) patch.title = args.title
+        if (args.content !== undefined) patch.content = args.content
+        const { data, error } = await supabase.from('kb_entries').update(patch).eq('id', args.id).select().single()
+        if (error) throw error
+        return { ok: true, summary: `Updated knowledge base entry "${data?.title || args.id}"`, data }
+      }
+      case 'delete_kb_entry': {
+        if (!args.id) throw new Error('Missing entry id')
+        const { data: existing } = await supabase.from('kb_entries').select('title').eq('id', args.id).single()
+        const { error } = await supabase.from('kb_entries').delete().eq('id', args.id)
+        if (error) throw error
+        return { ok: true, summary: `Deleted knowledge base entry "${existing?.title || args.id}"` }
+      }
+
       default:
         return { ok: false, summary: `Unknown action requested: ${name}` }
     }

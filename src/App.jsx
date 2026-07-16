@@ -16,6 +16,7 @@ import { Hanoi } from './Hanoi.jsx'
 import { Snake } from './Snake.jsx'
 import { Battleship } from './Battleship.jsx'
 import { AIHelper } from './AIHelper.jsx'
+import { Knowledge } from './Knowledge.jsx'
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -194,6 +195,7 @@ export default function App() {
     }
     if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
     if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} onDataChanged={refreshState} />
+    if (activeNavItem?.label === 'Knowledge') return <Knowledge appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Wordle') return <Wordle />
     if (activeNavItem?.label === 'Tetris') return <Tetris />
     if (activeNavItem?.label === 'Hanoi') return <Hanoi />
