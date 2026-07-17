@@ -215,34 +215,35 @@ export function FitnessMap({ points, height = 260 }) {
     <div style={fullscreen ? { position: 'fixed', inset: 0, zIndex: 2000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' } : {}}>
       <div style={{ position: 'relative', flex: fullscreen ? 1 : undefined }}>
         <div ref={mapEl} style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 12, overflow: 'hidden', width: '100%' }} />
-        <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000, display: 'flex', gap: 6 }}>
-          <button onClick={() => setReplayOn(r => !r)} title="Route replay" style={{
-            border: 'none', borderRadius: 8, height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5,
-            background: replayOn ? 'var(--accent)' : 'var(--bg)', color: replayOn ? '#fff' : 'var(--text)',
-            cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 12.5, fontWeight: 600,
-          }}>
-            <i className="ti ti-map-pin-share" /> Replay
-          </button>
-          <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{
-            border: 'none', borderRadius: 8, width: 34, height: 34,
-            background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 15,
-          }}>
-            <i className={`ti ${fullscreen ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} />
-          </button>
-        </div>
-
-        {replayOn && live && (
-          <div style={{
-            position: 'absolute', top: 10, left: 10, zIndex: 1000,
-            background: 'var(--bg)', borderRadius: 10, padding: '7px 12px', boxShadow: 'var(--shadow-lg)',
-            display: 'flex', gap: 14, flexWrap: 'wrap', maxWidth: 'calc(100% - 20px)',
-          }}>
-            <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
-            {live.elapsedSec != null && <LiveStat label="Time" value={fmtDur(Math.round(live.elapsedSec))} />}
-            {live.paceLabel && <LiveStat label="Pace" value={live.paceLabel} />}
-            {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
+        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, pointerEvents: 'auto' }}>
+            <button onClick={() => setReplayOn(r => !r)} title="Route replay" style={{
+              border: 'none', borderRadius: 8, height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5,
+              background: replayOn ? 'var(--accent)' : 'var(--bg)', color: replayOn ? '#fff' : 'var(--text)',
+              cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 12.5, fontWeight: 600, flexShrink: 0,
+            }}>
+              <i className="ti ti-map-pin-share" /> Replay
+            </button>
+            <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{
+              border: 'none', borderRadius: 8, width: 34, height: 34, flexShrink: 0,
+              background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 15,
+            }}>
+              <i className={`ti ${fullscreen ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} />
+            </button>
           </div>
-        )}
+
+          {replayOn && live && (
+            <div style={{
+              alignSelf: 'flex-start', maxWidth: '100%', background: 'var(--bg)', borderRadius: 10, padding: '7px 12px',
+              boxShadow: 'var(--shadow-lg)', display: 'flex', gap: 14, flexWrap: 'wrap', pointerEvents: 'auto',
+            }}>
+              <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
+              {live.elapsedSec != null && <LiveStat label="Time" value={fmtDur(Math.round(live.elapsedSec))} />}
+              {live.paceLabel && <LiveStat label="Pace" value={live.paceLabel} />}
+              {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
+            </div>
+          )}
+        </div>
 
         {replayOn && (
           <div style={{
@@ -272,8 +273,8 @@ export function FitnessMap({ points, height = 260 }) {
 function LiveStat({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize: 9.5, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{value}</div>
+      <div style={{ fontSize: 'clamp(8.5px, 2vw, 9.5px)', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</div>
+      <div style={{ fontSize: 'clamp(12px, 3vw, 14px)', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>{value}</div>
     </div>
   )
 }
