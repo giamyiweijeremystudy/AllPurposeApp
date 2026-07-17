@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 import { FitnessMap } from './FitnessMap.jsx'
-import { parseGpx, gpxStats, fmtKm, fmtDur, fmtPace, activityIcon } from './fitnessUtils.js'
+import { parseGpx, gpxStats, segmentActivity, buildGpx, fmtKm, fmtDur, fmtPace, activityIcon } from './fitnessUtils.js'
 import { Sheet, FieldGrid, sheetInputStyle } from './FitnessSheet.jsx'
 
 const ACTIVITY_TYPES = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'GravelRide', 'Walk', 'Hike', 'Swim', 'WeightTraining', 'Workout', 'Yoga']
@@ -11,6 +11,7 @@ export function FitnessActivities({ appId, userId, activities, onChanged }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [manualModal, setManualModal] = useState(false)
+  const [segmentReview, setSegmentReview] = useState(null) // { name, segments } pending confirm
   const fileRef = useRef(null)
   const [importing, setImporting] = useState(false)
   const [msg, setMsg] = useState('')
@@ -21,6 +22,19 @@ export function FitnessActivities({ appId, userId, activities, onChanged }) {
     (!search.trim() || a.name.toLowerCase().includes(search.toLowerCase()))
   )
 
+  const insertSegments = async (name, segments, xmlByIndex) => {
+    const rows = segments.map((seg, i) => ({
+      app_id: appId, user_id: userId, source: 'gpx',
+      name: segments.length > 1 ? `${name} — ${seg.type} ${i + 1}` : name,
+      type: seg.type, start_at: (seg.startTime || new Date()).toISOString(),
+      distance_km: seg.distanceKm, moving_sec: seg.movingSec ? Math.round(seg.movingSec) : null,
+      elevation_m: seg.elevationM, gpx: xmlByIndex[i],
+    }))
+    const { error } = await supabase.from('fitness_activities').insert(rows)
+    if (error) throw error
+    return rows.length
+  }
+
   const importGpx = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -29,15 +43,18 @@ export function FitnessActivities({ appId, userId, activities, onChanged }) {
     try {
       const xml = await file.text()
       const { name, points } = parseGpx(xml)
-      const stats = gpxStats(points)
-      const { error } = await supabase.from('fitness_activities').insert({
-        app_id: appId, user_id: userId, source: 'gpx', name,
-        type: 'Run', start_at: stats.startTime ? stats.startTime.toISOString() : new Date().toISOString(),
-        distance_km: stats.distanceKm, moving_sec: stats.movingSec ? Math.round(stats.movingSec) : null,
-        elevation_m: stats.elevationM, gpx: xml,
-      })
-      if (error) throw error
-      setMsg(`Imported "${name}" (${stats.distanceKm.toFixed(1)} km)`)
+      const segments = segmentActivity(points)
+      const xmlByIndex = segments.map(seg => buildGpx(name, seg.points))
+
+      if (segments.length > 1) {
+        // Multiple activity types detected in one recording — let the user
+        // confirm/adjust before splitting it into separate activities.
+        setSegmentReview({ name, segments, xmlByIndex })
+        setImporting(false)
+        return
+      }
+      const count = await insertSegments(name, segments, xmlByIndex)
+      setMsg(`Imported "${name}" (${segments[0].distanceKm.toFixed(1)} km, ${segments[0].type.toLowerCase()})`)
       onChanged()
     } catch (err) { setMsg(`⚠️ ${err.message}`) } finally { setImporting(false) }
   }
@@ -100,7 +117,72 @@ export function FitnessActivities({ appId, userId, activities, onChanged }) {
       {manualModal && (
         <ManualActivityModal appId={appId} userId={userId} onClose={() => setManualModal(false)} onSaved={() => { setManualModal(false); onChanged() }} />
       )}
+
+      {segmentReview && (
+        <SegmentReviewModal
+          review={segmentReview}
+          onCancel={() => setSegmentReview(null)}
+          onConfirm={async (segments) => {
+            setImporting(true)
+            try {
+              const xmlByIndex = segments.map(seg => buildGpx(segmentReview.name, seg.points))
+              const count = await insertSegments(segmentReview.name, segments, xmlByIndex)
+              setMsg(`Imported ${count} activities from "${segmentReview.name}"`)
+              onChanged()
+            } catch (err) { setMsg(`⚠️ ${err.message}`) } finally { setImporting(false); setSegmentReview(null) }
+          }}
+          onImportAsOne={async () => {
+            setImporting(true)
+            try {
+              const allPoints = segmentReview.segments.flatMap(s => s.points)
+              const stats = gpxStats(allPoints)
+              const single = [{ type: segmentReview.segments[0].type, points: allPoints, ...stats }]
+              const xml = [buildGpx(segmentReview.name, allPoints)]
+              const count = await insertSegments(segmentReview.name, single, xml)
+              setMsg(`Imported "${segmentReview.name}" as one activity`)
+              onChanged()
+            } catch (err) { setMsg(`⚠️ ${err.message}`) } finally { setImporting(false); setSegmentReview(null) }
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Segment review — shown when a GPX recording contains multiple ──
+// detected activity types (e.g. walk + run + walk)
+function SegmentReviewModal({ review, onCancel, onConfirm, onImportAsOne }) {
+  const [segments, setSegments] = useState(review.segments.map(s => ({ ...s })))
+  const setType = (i, type) => setSegments(prev => prev.map((s, idx) => idx === i ? { ...s, type } : s))
+
+  return (
+    <Sheet title="Multiple activities detected" onClose={onCancel}>
+      <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.5, marginTop: -4 }}>
+        This recording looks like it includes {segments.length} different activities based on pace. Adjust the types below if needed, then import.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {segments.map((seg, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--border)', borderRadius: 10, padding: '9px 10px' }}>
+            <i className={`ti ${activityIcon(seg.type)}`} style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }} />
+            <select value={seg.type} onChange={e => setType(i, e.target.value)} style={{ ...sheetInputStyle, flex: '0 0 110px', padding: '6px 8px', fontSize: 12.5 }}>
+              {['Walk', 'Run', 'Ride'].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <div style={{ flex: 1, fontSize: 12, color: 'var(--text-2)' }}>
+              {fmtKm(seg.distanceKm)} · {fmtDur(seg.movingSec)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+        <button onClick={() => onConfirm(segments)} style={{ border: 'none', borderRadius: 8, padding: '12px 0', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          Import as {segments.length} activities
+        </button>
+        <button onClick={onImportAsOne} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '11px 0', background: 'transparent', color: 'var(--text)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+          Import as one activity instead
+        </button>
+        <button onClick={onCancel} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>Cancel</button>
+      </div>
+    </Sheet>
   )
 }
 

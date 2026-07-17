@@ -58,6 +58,88 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
+// ── Auto-segmentation: detect activity-type changes within one GPX track ──
+// Classifies each point by a smoothed local speed, then merges consecutive
+// same-type points into segments (folding very short blips into a
+// neighbor), so a single recording that includes e.g. a walk to the
+// trailhead + a run + cooldown walk gets split into separate typed
+// activities instead of being imported as one blended blob.
+const SPEED_THRESHOLDS_KMH = { walk: 6.5, run: 15 } // <6.5 Walk, 6.5–15 Run, >15 Ride
+const MIN_SEGMENT_SEC = 90 // segments shorter than this get folded into a neighbor
+
+function classifySpeed(kmh) {
+  if (kmh < SPEED_THRESHOLDS_KMH.walk) return 'Walk'
+  if (kmh < SPEED_THRESHOLDS_KMH.run) return 'Run'
+  return 'Ride'
+}
+
+export function segmentActivity(points) {
+  if (points.length < 3 || !points.every(p => p.time)) {
+    // No timestamps (or too few points) to compute speed — treat as one segment
+    const stats = gpxStats(points)
+    return [{ type: 'Run', points, ...stats }]
+  }
+
+  // Smoothed instantaneous speed per point (rolling window over ~5 points)
+  const speeds = points.map(() => 0)
+  for (let i = 1; i < points.length; i++) {
+    const dt = (new Date(points[i].time) - new Date(points[i - 1].time)) / 1000
+    if (dt <= 0) { speeds[i] = speeds[i - 1]; continue }
+    const dKm = haversine(points[i - 1], points[i])
+    speeds[i] = (dKm / dt) * 3600 // km/h
+  }
+  const window = 5
+  const smoothed = speeds.map((_, i) => {
+    const lo = Math.max(0, i - window), hi = Math.min(speeds.length, i + window + 1)
+    const slice = speeds.slice(lo, hi)
+    return slice.reduce((a, b) => a + b, 0) / slice.length
+  })
+  const types = smoothed.map(classifySpeed)
+
+  // Merge into runs of the same type
+  let raw = []
+  let start = 0
+  for (let i = 1; i <= types.length; i++) {
+    if (i === types.length || types[i] !== types[start]) {
+      raw.push({ type: types[start], startIdx: start, endIdx: i - 1 })
+      start = i
+    }
+  }
+
+  // Fold segments shorter than MIN_SEGMENT_SEC into the longer neighbor
+  const segDur = s => (new Date(points[s.endIdx].time) - new Date(points[s.startIdx].time)) / 1000
+  let changed = true
+  while (changed && raw.length > 1) {
+    changed = false
+    for (let i = 0; i < raw.length; i++) {
+      if (segDur(raw[i]) < MIN_SEGMENT_SEC) {
+        const prev = raw[i - 1], next = raw[i + 1]
+        const target = prev && (!next || segDur(prev) >= segDur(next)) ? prev : next
+        if (target) {
+          target.startIdx = Math.min(target.startIdx, raw[i].startIdx)
+          target.endIdx = Math.max(target.endIdx, raw[i].endIdx)
+          raw.splice(i, 1)
+          changed = true
+          break
+        }
+      }
+    }
+  }
+  // Re-merge any now-adjacent same-type segments
+  const merged = []
+  for (const seg of raw) {
+    const last = merged[merged.length - 1]
+    if (last && last.type === seg.type && last.endIdx >= seg.startIdx - 1) last.endIdx = seg.endIdx
+    else merged.push({ ...seg })
+  }
+
+  return merged.map(seg => {
+    const segPoints = points.slice(seg.startIdx, seg.endIdx + 1)
+    const stats = gpxStats(segPoints)
+    return { type: seg.type, points: segPoints, ...stats }
+  })
+}
+
 // Decode a Strava/Google encoded polyline → [{lat, lon}]
 export function decodePolyline(str) {
   if (!str) return []
