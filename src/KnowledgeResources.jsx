@@ -56,8 +56,8 @@ function MediaCard({ r, onDelete }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--bg)' }}>
       {r.kind === 'image' && (
-        <a href={r.url} target="_blank" rel="noreferrer">
-          <img src={r.url} alt={r.title} style={{ width: '100%', height: 130, objectFit: 'cover', display: 'block' }} />
+        <a href={r.url} target="_blank" rel="noreferrer" style={{ display: 'block', background: 'var(--bg-2)' }}>
+          <img src={r.url} alt={r.title} style={{ width: '100%', maxHeight: 420, objectFit: 'contain', display: 'block' }} />
         </a>
       )}
       {r.kind === 'video' && (
