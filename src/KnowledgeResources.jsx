@@ -110,6 +110,7 @@ function AddResourceModal({ node, appId, userId, onClose, onAdded }) {
   const [tab, setTab] = useState('upload')
   const [link, setLink] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const fileRef = useRef(null)
 
@@ -121,13 +122,13 @@ function AddResourceModal({ node, appId, userId, onClose, onAdded }) {
   const onFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setProgress(0)
     try {
-      const uploaded = await uploadKbFile(userId, file)
+      const uploaded = await uploadKbFile(userId, file, setProgress)
       const kind = kindForMime(file.type, file.name)
       await insertResource({ kind, title: file.name, ...uploaded })
       onAdded()
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
+    } catch (e) { setError(e.message) } finally { setBusy(false); setProgress(0) }
   }
 
   const addLink = async () => {
@@ -176,8 +177,13 @@ function AddResourceModal({ node, appId, userId, onClose, onAdded }) {
               color: 'var(--text-2)', fontSize: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
             }}>
               <i className="ti ti-upload" style={{ fontSize: 22 }} />
-              {busy ? 'Uploading…' : 'Choose a photo, PDF, video, or document'}
+              {busy ? `Uploading… ${Math.round(progress * 100)}%` : 'Choose a photo, PDF, video, or document'}
             </button>
+            {busy && (
+              <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-3)', overflow: 'hidden', marginTop: 8 }}>
+                <div style={{ width: `${progress * 100}%`, height: '100%', background: 'var(--accent-grad)', transition: 'width 0.15s linear' }} />
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 6 }}>

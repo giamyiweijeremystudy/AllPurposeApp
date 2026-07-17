@@ -34,18 +34,43 @@ export const DOC_ICONS = {
   link: 'ti-link', document: 'ti-file-text', file: 'ti-file',
 }
 
-// Uploads a File to the kb-files storage bucket under the user's own
-// folder, and returns { url, storage_path, mime_type, size_bytes }.
-export async function uploadKbFile(userId, file) {
-  const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
-  const path = `${userId}/${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage.from('kb-files').upload(path, file, { contentType: file.type || undefined })
-  if (error) throw error
-  const { data } = supabase.storage.from('kb-files').getPublicUrl(path)
-  return { url: data.publicUrl, storage_path: path, mime_type: file.type || null, size_bytes: file.size }
+// Uploads a File directly to Cloudflare R2 via a presigned URL (the file
+// never passes through our server, so there's no Vercel body-size limit).
+// onProgress(fraction) is optional, useful for larger files.
+export async function uploadKbFile(userId, file, onProgress) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const presignRes = await fetch('/api/r2-presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filename: file.name, contentType: file.type, sizeBytes: file.size }),
+  })
+  const presign = await presignRes.json()
+  if (!presignRes.ok) throw new Error(presign.error || 'Could not start the upload')
+
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', presign.uploadUrl)
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total) }
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`Upload failed (${xhr.status})`))
+    xhr.onerror = () => reject(new Error('Upload failed — network error'))
+    xhr.send(file)
+  })
+
+  return { url: presign.publicUrl, storage_path: presign.key, mime_type: file.type || null, size_bytes: file.size }
 }
 
 export async function deleteKbFile(storagePath) {
   if (!storagePath) return
-  await supabase.storage.from('kb-files').remove([storagePath])
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) return
+  await fetch('/api/r2-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ key: storagePath }),
+  }).catch(() => {})
 }
