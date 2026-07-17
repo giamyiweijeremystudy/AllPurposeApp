@@ -47,7 +47,7 @@ export function Fitness({ appId, userId }) {
   if (loading) return <FitnessSkeleton />
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 90 }}>
+    <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 24 }}>
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', borderRadius: 12, padding: 4, marginBottom: 16, overflowX: 'auto' }}>
         {TABS.map(t => (
@@ -66,16 +66,6 @@ export function Fitness({ appId, userId }) {
       {tab === 'activities' && <FitnessActivities appId={appId} userId={userId} activities={activities} onChanged={reload} />}
       {tab === 'gear' && <FitnessGear appId={appId} userId={userId} activities={activities} onChanged={reload} />}
       {tab === 'coach' && <FitnessCoach appId={appId} userId={userId} workouts={workouts} activities={activities} onChanged={reload} />}
-
-      {/* Floating action button — quick log */}
-      {tab === 'dashboard' && (
-        <button onClick={() => setLogModal({})} title="Log workout" style={{
-          position: 'fixed', right: 20, bottom: 24, zIndex: 100, width: 54, height: 54, borderRadius: 27, border: 'none',
-          background: 'var(--accent-grad)', color: '#fff', fontSize: 22, cursor: 'pointer', boxShadow: 'var(--glow)',
-        }}>
-          <i className="ti ti-plus" />
-        </button>
-      )}
 
       {logModal && (
         <LogModal
