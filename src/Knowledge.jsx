@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
 import { KnowledgeAssistant } from './KnowledgeAssistant.jsx'
+import { ResourcesSection } from './KnowledgeResources.jsx'
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(window.innerWidth <= 768)
@@ -42,6 +43,7 @@ export function Knowledge({ appId, userId }) {
   const [aiError, setAiError] = useState('')
   const [aiDraft, setAiDraft] = useState(null)
   const [customInstruction, setCustomInstruction] = useState('')
+  const [resources, setResources] = useState([])
 
   const reload = async () => {
     const { data } = await supabase.from('kb_nodes').select('*').eq('app_id', appId).eq('user_id', userId).order('sort_order')
@@ -49,6 +51,12 @@ export function Knowledge({ appId, userId }) {
     setLoading(false)
   }
   useEffect(() => { if (appId && userId) reload() }, [appId, userId])
+
+  useEffect(() => {
+    if (!activePageId) { setResources([]); return }
+    supabase.from('kb_resources').select('*').eq('node_id', activePageId).order('sort_order')
+      .then(({ data }) => setResources(data || []))
+  }, [activePageId])
 
   const currentParentId = trail.length ? trail[trail.length - 1].id : null
   const activePage = nodes.find(n => n.id === activePageId) || null
@@ -186,6 +194,9 @@ export function Knowledge({ appId, userId }) {
             )}
           </div>
         )}
+
+        <ResourcesSection node={activePage} resources={resources} appId={appId} userId={userId}
+          onChanged={() => supabase.from('kb_resources').select('*').eq('node_id', activePage.id).order('sort_order').then(({ data }) => setResources(data || []))} />
       </div>
     )
   }

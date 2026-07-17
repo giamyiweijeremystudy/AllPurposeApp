@@ -49,6 +49,11 @@ const TOOLS = [{
       description: 'Delete a folder (and everything inside it) or a page. Always shown to the user for confirmation before it happens.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
+    {
+      name: 'attach_resource',
+      description: "Attach the file the user most recently uploaded in this conversation (if any) to a page as a resource. Only call this after the user has uploaded a file and asked to attach/save/embed it somewhere.",
+      parameters: { type: 'OBJECT', properties: { page_id: ID_PARAM }, required: ['page_id'] },
+    },
   ],
 }]
 
@@ -74,6 +79,7 @@ export default async function handler(req, res) {
     "You are the filing assistant for a personal knowledge base, organized like a manual: books at the top level, containing sections, containing subsections, containing pages (the actual notes).",
     "You can see the current folder tree below (each item with its id, kind, and indentation showing its depth). Help the user create new books/sections/subsections/pages, move items to reorganize them, rename things, update page content, and delete things — using the tools directly rather than telling them to do it manually.",
     "When the user describes some content and asks you to file it, or asks 'where should this go', use the existing tree structure to suggest or create a sensible location (creating new folders if nothing fitting exists) rather than dumping everything at the top level.",
+    "If a message says the user uploaded and the file's content was extracted, that extracted text is available to you — use it as the content when creating or updating a page if the user asks to save/file it. If the user asks to attach/save the uploaded file itself (as opposed to just its extracted text) to a page, use attach_resource with that page's id.",
     "Be concise; plain text, minimal markdown.",
     context ? `\n\n--- Knowledge tree snapshot ---\n${String(context).slice(0, 14000)}` : '',
   ].join(' ')

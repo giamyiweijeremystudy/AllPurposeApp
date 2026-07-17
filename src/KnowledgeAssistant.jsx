@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from './supabase.js'
+import { uploadKbFile, kindForMime } from './kbResources.js'
 
 // Text snapshot of the whole tree (indented, with ids) for the AI to read.
 function buildTreeContext(nodes) {
@@ -20,13 +21,15 @@ function buildTreeContext(nodes) {
 
 export function KnowledgeAssistant({ appId, userId, nodes, onClose, onChanged }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "I can help organize your knowledge base — create books, sections, subsections, or pages, move things around, rename, or file new content wherever it makes sense. What do you need?" }
+    { role: 'assistant', content: "I can help organize your knowledge base — create books, sections, subsections, or pages, move things around, rename, or file new content wherever it makes sense. You can also upload a file (PDF, image, doc, text, or email) and I'll read it, extract the key info, and help you save and attach it to the right page. What do you need?" }
   ])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null) // { fc, node, resolve }
+  const [pendingResource, setPendingResource] = useState(null) // most recently uploaded file, awaiting attach_resource
   const scrollRef = useRef(null)
+  const fileRef = useRef(null)
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, busy, confirmDelete])
 
@@ -70,9 +73,20 @@ export function KnowledgeAssistant({ appId, userId, nodes, onClose, onChanged })
         if (error) throw error
         return { ok: true, summary: `Updated content of "${data.title}"`, data }
       }
+      if (fc.name === 'attach_resource') {
+        if (!a.page_id) throw new Error('Missing page_id')
+        if (!pendingResource) return { ok: false, summary: 'No recently uploaded file to attach — ask the user to upload one first.' }
+        const { error } = await supabase.from('kb_resources').insert({
+          node_id: a.page_id, app_id: appId, user_id: userId,
+          kind: pendingResource.kind, title: pendingResource.title, url: pendingResource.url,
+          storage_path: pendingResource.storage_path, mime_type: pendingResource.mime_type, size_bytes: pendingResource.size_bytes,
+        })
+        if (error) throw error
+        setPendingResource(null)
+        return { ok: true, summary: `Attached "${pendingResource.title}" to the page` }
+      }
       if (fc.name === 'delete_node') {
         if (!a.id) throw new Error('Missing id')
-        const node = nodes.find(n => n.id === a.id)
         const confirmed = await new Promise(resolve => setConfirmDelete({ fc, node, resolve }))
         setConfirmDelete(null)
         if (!confirmed) return { ok: false, summary: 'The user declined to delete this.' }
@@ -108,6 +122,56 @@ export function KnowledgeAssistant({ appId, userId, nodes, onClose, onChanged })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setError('')
+    setMessages(m => [...m, { role: 'user', content: `📎 Uploaded ${file.name}`, display: `📎 Uploaded ${file.name}` }])
+    setBusy(true)
+    try {
+      const uploaded = await uploadKbFile(userId, file)
+      const kind = kindForMime(file.type, file.name)
+      const resource = { title: file.name, kind, ...uploaded }
+      setPendingResource(resource)
+
+      const extractable = kind === 'pdf' || kind === 'image' || kind === 'document' || /\.(txt|csv|eml)$/i.test(file.name)
+      if (extractable) {
+        let body
+        if (kind === 'pdf' || kind === 'image') {
+          const data64 = await fileToBase64(file)
+          body = { file: { data: data64, mimeType: file.type } }
+        } else if (/\.(docx)$/i.test(file.name)) {
+          const mammoth = await import('mammoth')
+          const buf = await file.arrayBuffer()
+          const { value } = await mammoth.extractRawText({ arrayBuffer: buf })
+          body = { file: { text: value } }
+        } else {
+          body = { file: { text: await file.text() } }
+        }
+        const res = await fetch('/api/kb-extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || 'Could not read the file')
+        setMessages(m => [
+          ...m,
+          {
+            role: 'user', display: `📄 Extracted from ${file.name}: "${data.title}"`,
+            content: `[The file "${file.name}" was uploaded and its content was extracted. Suggested title: "${data.title}". Extracted content:]\n\n${data.content}`,
+          },
+        ])
+      } else {
+        setMessages(m => [...m, { role: 'assistant', content: `Uploaded "${file.name}" — tell me where to file it and I'll attach it to a page.` }])
+      }
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1])
+    r.onerror = () => reject(new Error('Could not read file'))
+    r.readAsDataURL(file)
+  })
+
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
@@ -129,7 +193,7 @@ export function KnowledgeAssistant({ appId, userId, nodes, onClose, onChanged })
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%',
               background: m.role === 'user' ? 'var(--accent)' : 'var(--bg-2)', color: m.role === 'user' ? '#fff' : 'var(--text)',
               borderRadius: 12, padding: '9px 12px', fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap',
-            }}>{m.content}</div>
+            }}>{m.display || m.content}</div>
           ))}
           {busy && <div style={{ alignSelf: 'flex-start', color: 'var(--text-3)', fontSize: 13, padding: '4px 8px' }}><i className="ti ti-loader-2 spin" /> Working…</div>}
           {error && <div style={{ alignSelf: 'flex-start', color: 'var(--danger)', fontSize: 12.5, padding: '4px 8px' }}><i className="ti ti-alert-circle" /> {error}</div>}
@@ -150,6 +214,10 @@ export function KnowledgeAssistant({ appId, userId, nodes, onClose, onChanged })
         </div>
 
         <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border)' }}>
+          <input ref={fileRef} type="file" onChange={onFile} style={{ display: 'none' }} />
+          <button onClick={() => fileRef.current?.click()} disabled={busy} title="Upload a file for the AI to read and file" style={{
+            border: '1px solid var(--border)', borderRadius: 10, padding: '0 12px', background: 'var(--bg)', color: 'var(--text-2)', cursor: 'pointer', fontSize: 17,
+          }}><i className="ti ti-paperclip" /></button>
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
             placeholder="e.g. 'Create a book called Cooking with a Recipes section'…"
             style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 13.5, background: 'var(--bg)', color: 'var(--text)' }} />
