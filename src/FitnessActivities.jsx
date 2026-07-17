@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 import { FitnessMap } from './FitnessMap.jsx'
 import { parseGpx, gpxStats, fmtKm, fmtDur, fmtPace, activityIcon } from './fitnessUtils.js'
+import { Sheet, FieldGrid, sheetInputStyle } from './FitnessSheet.jsx'
 
 const ACTIVITY_TYPES = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'GravelRide', 'Walk', 'Hike', 'Swim', 'WeightTraining', 'Workout', 'Yoga']
 
@@ -138,37 +139,27 @@ function ManualActivityModal({ appId, userId, onClose, onSaved }) {
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--bg)', width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto', borderRadius: 'var(--radius-lg)',
-        padding: 18, boxShadow: 'var(--shadow-lg)', animation: 'module-enter 0.22s var(--ease-out)', display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', flex: 1 }}>Log activity</div>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer' }}><i className="ti ti-x" /></button>
-        </div>
+    <Sheet title="Log activity" onClose={onClose}>
+      <input placeholder="Name (e.g. Morning run)" value={d.name} onChange={e => set('name', e.target.value)} style={sheetInputStyle} autoFocus />
+      <FieldGrid>
+        <select value={d.type} onChange={e => set('type', e.target.value)} style={sheetInputStyle}>
+          {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input type="datetime-local" value={d.start_at} onChange={e => set('start_at', e.target.value)} style={sheetInputStyle} />
+        <input type="number" inputMode="decimal" placeholder="Distance (km)" value={d.distance_km} onChange={e => set('distance_km', e.target.value)} style={sheetInputStyle} />
+        <input type="number" inputMode="decimal" placeholder="Duration (min)" value={d.moving_sec_min} onChange={e => set('moving_sec_min', e.target.value)} style={sheetInputStyle} />
+        <input type="number" inputMode="decimal" placeholder="Elevation (m)" value={d.elevation_m} onChange={e => set('elevation_m', e.target.value)} style={sheetInputStyle} />
+        <input type="number" inputMode="decimal" placeholder="Avg HR (bpm)" value={d.avg_hr} onChange={e => set('avg_hr', e.target.value)} style={sheetInputStyle} />
+      </FieldGrid>
+      <textarea placeholder="Notes (optional)" value={d.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...sheetInputStyle, resize: 'none', fontFamily: 'inherit' }} />
 
-        <input placeholder="Name (e.g. Morning run)" value={d.name} onChange={e => set('name', e.target.value)} style={inp} autoFocus />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <select value={d.type} onChange={e => set('type', e.target.value)} style={inp}>
-            {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input type="datetime-local" value={d.start_at} onChange={e => set('start_at', e.target.value)} style={inp} />
-          <input type="number" inputMode="decimal" placeholder="Distance (km)" value={d.distance_km} onChange={e => set('distance_km', e.target.value)} style={inp} />
-          <input type="number" inputMode="decimal" placeholder="Duration (min)" value={d.moving_sec_min} onChange={e => set('moving_sec_min', e.target.value)} style={inp} />
-          <input type="number" inputMode="decimal" placeholder="Elevation (m)" value={d.elevation_m} onChange={e => set('elevation_m', e.target.value)} style={inp} />
-          <input type="number" inputMode="decimal" placeholder="Avg HR (bpm)" value={d.avg_hr} onChange={e => set('avg_hr', e.target.value)} style={inp} />
-        </div>
-        <textarea placeholder="Notes (optional)" value={d.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...inp, resize: 'none', fontFamily: 'inherit' }} />
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-          <button onClick={onClose} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', background: 'transparent', color: 'var(--text)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '9px 0', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+        <button onClick={onClose} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '12px 0', background: 'transparent', color: 'var(--text)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={save} disabled={saving} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '12px 0', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
       </div>
-    </div>
+    </Sheet>
   )
 }
 

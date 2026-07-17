@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from './supabase.js'
 import { fmtDur } from './fitnessUtils.js'
+import { Sheet, FieldGrid, sheetInputStyle } from './FitnessSheet.jsx'
 
 const SHOE_TYPES = ['Road', 'Trail', 'Racing', 'Walking', 'Other']
 const MAINT_ITEMS = ['Chain', 'Brakes', 'Tires', 'Drivetrain', 'Suspension']
@@ -180,7 +181,7 @@ function GearModal({ kind, appId, userId, initial, onClose, onSaved }) {
 
   return (
     <Modal title={`${isEdit ? 'Edit' : 'Add'} ${isShoe ? 'shoe' : 'bike'}`} onClose={onClose}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <FieldGrid>
         <input placeholder="Brand" value={d.brand} onChange={e => set('brand', e.target.value)} style={inp} />
         <input placeholder="Model" value={d.model} onChange={e => set('model', e.target.value)} style={inp} />
         {isShoe ? (
@@ -199,7 +200,7 @@ function GearModal({ kind, appId, userId, initial, onClose, onSaved }) {
             <input placeholder="Wheel size" value={d.wheel_size} onChange={e => set('wheel_size', e.target.value)} style={{ ...inp, gridColumn: '1 / -1' }} />
           </>
         )}
-      </div>
+      </FieldGrid>
       <textarea placeholder="Notes" value={d.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...inp, resize: 'none', fontFamily: 'inherit' }} />
       {isShoe && isEdit && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
@@ -235,7 +236,7 @@ function MaintenanceModal({ bike, stats, userId, entries, onClose, onSaved }) {
   return (
     <Modal title={`Maintenance — ${[bike.brand, bike.model].filter(Boolean).join(' ') || 'bike'}`} onClose={onClose}>
       <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: -4 }}>Current mileage: {(stats?.km || 0).toFixed(0)} km. Log a service now, optionally with a reminder interval.</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <FieldGrid>
         <select value={item} onChange={e => setItem(e.target.value)} style={{ ...inp, gridColumn: item === 'custom' ? undefined : '1 / -1' }}>
           {MAINT_ITEMS.map(m => <option key={m} value={m}>{m}</option>)}
           <option value="custom">Custom…</option>
@@ -243,8 +244,8 @@ function MaintenanceModal({ bike, stats, userId, entries, onClose, onSaved }) {
         {item === 'custom' && <input placeholder="Item name" value={customItem} onChange={e => setCustomItem(e.target.value)} style={inp} />}
         <input type="number" placeholder="Remind every … km" value={intervalKm} onChange={e => setIntervalKm(e.target.value)} style={inp} />
         <input type="number" placeholder="…or every … days" value={intervalDays} onChange={e => setIntervalDays(e.target.value)} style={inp} />
-      </div>
-      <button onClick={add} style={{ border: 'none', borderRadius: 8, padding: '9px 0', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Log service</button>
+      </FieldGrid>
+      <button onClick={add} style={{ border: 'none', borderRadius: 8, padding: '12px 0', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Log service</button>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
         {entries.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-3)', textAlign: 'center' }}>No maintenance logged yet.</div>}
@@ -271,38 +272,25 @@ function MaintenanceModal({ bike, stats, userId, entries, onClose, onSaved }) {
 
 // ── Shared modal chrome ──────────────────────────────────────
 function Modal({ title, children, onClose }) {
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--bg)', width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto', borderRadius: 'var(--radius-lg)',
-        padding: 18, boxShadow: 'var(--shadow-lg)', animation: 'module-enter 0.22s var(--ease-out)', display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', flex: 1 }}>{title}</div>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer' }}><i className="ti ti-x" /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
+  return <Sheet title={title} onClose={onClose}>{children}</Sheet>
 }
 function ModalActions({ isEdit, confirming, setConfirming, onDelete, onCancel, onSave }) {
   if (confirming) return (
     <div style={{ border: '1px solid var(--danger)', borderRadius: 8, padding: 10, background: 'var(--danger-bg)', fontSize: 12.5 }}>
       <div style={{ marginBottom: 8 }}>Delete this? This can't be undone.</div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onDelete} style={{ border: 'none', borderRadius: 7, padding: '7px 12px', background: 'var(--danger)', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Delete</button>
-        <button onClick={() => setConfirming(false)} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '7px 12px', background: 'transparent', color: 'var(--text)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={onDelete} style={{ border: 'none', borderRadius: 7, padding: '11px 14px', background: 'var(--danger)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Delete</button>
+        <button onClick={() => setConfirming(false)} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '11px 14px', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
   )
   return (
     <div style={{ display: 'flex', gap: 8 }}>
-      {isEdit && <button onClick={() => setConfirming(true)} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0 12px', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 15 }}><i className="ti ti-trash" /></button>}
-      <button onClick={onCancel} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', background: 'transparent', color: 'var(--text)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-      <button onClick={onSave} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '9px 0', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+      {isEdit && <button onClick={() => setConfirming(true)} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0 14px', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 16 }}><i className="ti ti-trash" /></button>}
+      <button onClick={onCancel} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '12px 0', background: 'transparent', color: 'var(--text)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+      <button onClick={onSave} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '12px 0', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Save</button>
     </div>
   )
 }
 
-const inp = { border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13.5, background: 'var(--bg)', color: 'var(--text)' }
+const inp = sheetInputStyle

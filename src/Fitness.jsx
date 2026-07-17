@@ -4,6 +4,7 @@ import { FitnessActivities } from './FitnessActivities.jsx'
 import { FitnessGear } from './FitnessGear.jsx'
 import { FitnessCoach } from './FitnessCoach.jsx'
 import { fmtKm, fmtDur } from './fitnessUtils.js'
+import { Sheet, FieldGrid, sheetInputStyle } from './FitnessSheet.jsx'
 
 export const EXERCISES = [
   { id: 'pushups', label: 'Push-ups', icon: 'ti-hand-stop', fields: ['sets', 'reps'] },
@@ -297,55 +298,45 @@ function LogModal({ appId, userId, initial, onClose, onSaved }) {
   }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--bg)', width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto', borderRadius: 'var(--radius-lg)',
-        padding: 18, boxShadow: 'var(--shadow-lg)', animation: 'module-enter 0.22s var(--ease-out)', display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-display)', flex: 1 }}>{isEdit ? 'Edit workout' : 'Log workout'}</div>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', fontSize: 18, cursor: 'pointer' }}><i className="ti ti-x" /></button>
-        </div>
+    <Sheet title={isEdit ? 'Edit workout' : 'Log workout'} onClose={onClose}>
+      <select value={ex} onChange={e => setEx(e.target.value)} style={sheetInputStyle}>
+        {EXERCISES.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
+      </select>
 
-        <select value={ex} onChange={e => setEx(e.target.value)} style={inp}>
-          {EXERCISES.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
-        </select>
+      <FieldGrid>
+        {meta.fields.map(f => (
+          <input key={f} type={fieldDefs[f].type} inputMode={fieldDefs[f].type === 'number' ? 'decimal' : undefined}
+            placeholder={fieldDefs[f].label} value={data[f]}
+            onChange={e => set(f, e.target.value)}
+            style={{ ...sheetInputStyle, gridColumn: f === 'custom_name' ? '1 / -1' : undefined }} />
+        ))}
+      </FieldGrid>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {meta.fields.map(f => (
-            <input key={f} type={fieldDefs[f].type} inputMode={fieldDefs[f].type === 'number' ? 'decimal' : undefined}
-              placeholder={fieldDefs[f].label} value={data[f]}
-              onChange={e => set(f, e.target.value)}
-              style={{ ...inp, gridColumn: f === 'custom_name' ? '1 / -1' : undefined }} />
-          ))}
-        </div>
+      <input type="datetime-local" value={data.performed_at} onChange={e => set('performed_at', e.target.value)} style={sheetInputStyle} />
+      <textarea placeholder="Notes (optional)" value={data.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...sheetInputStyle, resize: 'none', fontFamily: 'inherit' }} />
 
-        <input type="datetime-local" value={data.performed_at} onChange={e => set('performed_at', e.target.value)} style={inp} />
-        <textarea placeholder="Notes (optional)" value={data.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...inp, resize: 'none', fontFamily: 'inherit' }} />
-
-        {confirmingDelete ? (
-          <div style={{ border: '1px solid var(--danger)', borderRadius: 8, padding: 10, background: 'var(--danger-bg)', fontSize: 12.5 }}>
-            <div style={{ marginBottom: 8 }}>Delete this workout?</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={del} style={{ border: 'none', borderRadius: 7, padding: '7px 12px', background: 'var(--danger)', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>Delete</button>
-              <button onClick={() => setConfirmingDelete(false)} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '7px 12px', background: 'transparent', color: 'var(--text)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
-            </div>
+      {confirmingDelete ? (
+        <div style={{ border: '1px solid var(--danger)', borderRadius: 8, padding: 10, background: 'var(--danger-bg)', fontSize: 12.5 }}>
+          <div style={{ marginBottom: 8 }}>Delete this workout?</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={del} style={{ border: 'none', borderRadius: 7, padding: '11px 14px', background: 'var(--danger)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Delete</button>
+            <button onClick={() => setConfirmingDelete(false)} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '11px 14px', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-            {isEdit && (
-              <button onClick={() => setConfirmingDelete(true)} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0 12px', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 15 }}>
-                <i className="ti ti-trash" />
-              </button>
-            )}
-            <button onClick={onClose} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 0', background: 'transparent', color: 'var(--text)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-            <button onClick={save} disabled={saving} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '9px 0', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Saving…' : 'Save'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+          {isEdit && (
+            <button onClick={() => setConfirmingDelete(true)} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0 14px', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', fontSize: 16 }}>
+              <i className="ti ti-trash" />
             </button>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+          <button onClick={onClose} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '12px 0', background: 'transparent', color: 'var(--text)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ flex: 1, border: 'none', borderRadius: 8, padding: '12px 0', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+    </Sheet>
   )
 }
 
