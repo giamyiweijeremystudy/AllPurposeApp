@@ -213,36 +213,33 @@ export function FitnessMap({ points, height = 260 }) {
 
   return (
     <div style={fullscreen ? { position: 'fixed', inset: 0, zIndex: 2000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' } : {}}>
+      {replayOn && live && (
+        <div style={{
+          display: 'flex', gap: 16, flexWrap: 'wrap', padding: '8px 4px 10px',
+          borderBottom: fullscreen ? '1px solid var(--border)' : undefined,
+        }}>
+          <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
+          {live.elapsedSec != null && <LiveStat label="Time" value={fmtDur(Math.round(live.elapsedSec))} />}
+          {live.paceLabel && <LiveStat label="Pace" value={live.paceLabel} />}
+          {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
+        </div>
+      )}
       <div style={{ position: 'relative', flex: fullscreen ? 1 : undefined }}>
         <div ref={mapEl} style={{ height: fullscreen ? '100%' : height, borderRadius: fullscreen ? 0 : 12, overflow: 'hidden', width: '100%' }} />
-        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, pointerEvents: 'auto' }}>
-            <button onClick={() => setReplayOn(r => !r)} title="Route replay" style={{
-              border: 'none', borderRadius: 8, height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5,
-              background: replayOn ? 'var(--accent)' : 'var(--bg)', color: replayOn ? '#fff' : 'var(--text)',
-              cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 12.5, fontWeight: 600, flexShrink: 0,
-            }}>
-              <i className="ti ti-map-pin-share" /> Replay
-            </button>
-            <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{
-              border: 'none', borderRadius: 8, width: 34, height: 34, flexShrink: 0,
-              background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 15,
-            }}>
-              <i className={`ti ${fullscreen ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} />
-            </button>
-          </div>
-
-          {replayOn && live && (
-            <div style={{
-              alignSelf: 'flex-start', maxWidth: '100%', background: 'var(--bg)', borderRadius: 10, padding: '7px 12px',
-              boxShadow: 'var(--shadow-lg)', display: 'flex', gap: 14, flexWrap: 'wrap', pointerEvents: 'auto',
-            }}>
-              <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
-              {live.elapsedSec != null && <LiveStat label="Time" value={fmtDur(Math.round(live.elapsedSec))} />}
-              {live.paceLabel && <LiveStat label="Pace" value={live.paceLabel} />}
-              {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
-            </div>
-          )}
+        <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000, display: 'flex', gap: 6 }}>
+          <button onClick={() => setReplayOn(r => !r)} title="Route replay" style={{
+            border: 'none', borderRadius: 8, height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5,
+            background: replayOn ? 'var(--accent)' : 'var(--bg)', color: replayOn ? '#fff' : 'var(--text)',
+            cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 12.5, fontWeight: 600, flexShrink: 0,
+          }}>
+            <i className="ti ti-map-pin-share" /> Replay
+          </button>
+          <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{
+            border: 'none', borderRadius: 8, width: 34, height: 34, flexShrink: 0,
+            background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer', boxShadow: 'var(--shadow-lg)', fontSize: 15,
+          }}>
+            <i className={`ti ${fullscreen ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} />
+          </button>
         </div>
 
         {replayOn && (
