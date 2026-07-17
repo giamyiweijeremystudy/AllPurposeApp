@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadLeaflet } from './fitnessUtils.js'
+import { loadLeaflet, fmtDur, fmtPace } from './fitnessUtils.js'
 
 const REPLAY_WALL_SECONDS = 20 // whole route compressed into this many real seconds of playback
 const FOLLOW_ZOOM = 17 // how close the camera zooms in while following the blob
@@ -71,7 +71,8 @@ export function FitnessMap({ points, height = 260 }) {
     }
   }, [points])
 
-  // Position + live stats (distance, elevation) at a given fraction of the route
+  // Position + live stats (distance, elevation, elapsed time, pace) at a
+  // given fraction of the route
   const stateAt = (frac) => {
     const tl = timelineRef.current
     const cumDist = distCumRef.current
@@ -89,10 +90,13 @@ export function FitnessMap({ points, height = 260 }) {
       local = target - lo
     }
     const a = points[lo], b = points[hi]
+    const distKm = cumDist ? lerp(cumDist[lo], cumDist[hi], local) : null
+    const elapsedSec = tl.hasTime ? lerp(tl.cum[lo], tl.cum[hi], local) : null
     return {
       lat: lerp(a.lat, b.lat, local), lon: lerp(a.lon, b.lon, local),
       ele: (a.ele != null && b.ele != null) ? lerp(a.ele, b.ele, local) : (a.ele ?? b.ele ?? null),
-      distKm: cumDist ? lerp(cumDist[lo], cumDist[hi], local) : null,
+      distKm, elapsedSec,
+      paceLabel: (elapsedSec && distKm) ? fmtPace(distKm, elapsedSec) : null,
     }
   }
 
@@ -174,7 +178,7 @@ export function FitnessMap({ points, height = 260 }) {
     const s = stateAt(progress)
     if (!s) return
     blobRef.current.setLatLng([s.lat, s.lon])
-    setLive({ distKm: s.distKm, ele: s.ele })
+    setLive({ distKm: s.distKm, ele: s.ele, elapsedSec: s.elapsedSec, paceLabel: s.paceLabel })
     if (mapRef.current) mapRef.current.setView([s.lat, s.lon], FOLLOW_ZOOM, { animate: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, replayOn, points])
@@ -231,9 +235,11 @@ export function FitnessMap({ points, height = 260 }) {
           <div style={{
             position: 'absolute', top: 10, left: 10, zIndex: 1000,
             background: 'var(--bg)', borderRadius: 10, padding: '7px 12px', boxShadow: 'var(--shadow-lg)',
-            display: 'flex', gap: 14,
+            display: 'flex', gap: 14, flexWrap: 'wrap', maxWidth: 'calc(100% - 20px)',
           }}>
             <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
+            {live.elapsedSec != null && <LiveStat label="Time" value={fmtDur(Math.round(live.elapsedSec))} />}
+            {live.paceLabel && <LiveStat label="Pace" value={live.paceLabel} />}
             {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
           </div>
         )}
