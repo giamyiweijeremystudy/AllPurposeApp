@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loadLeaflet } from './fitnessUtils.js'
 
 const REPLAY_WALL_SECONDS = 20 // whole route compressed into this many real seconds of playback
+const FOLLOW_ZOOM = 17 // how close the camera zooms in while following the blob
 
 let pulseStyleInjected = false
 function ensurePulseStyle() {
@@ -17,26 +18,46 @@ function ensurePulseStyle() {
   pulseStyleInjected = true
 }
 
+function haversineKm(a, b) {
+  const R = 6371, toRad = x => x * Math.PI / 180
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+function lerp(a, b, t) { return a + (b - a) * t }
+
+// Precompute cumulative distance (km) at every point — shared by the
+// replay's live distance readout and the elevation chart's tooltip.
+function cumulativeDistances(points) {
+  const cum = [0]
+  for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + haversineKm(points[i - 1], points[i]))
+  return cum
+}
+
 // Interactive route map (Leaflet via CDN): zoom/pan, fullscreen toggle,
-// start/finish markers, km distance markers, optional elevation profile,
-// and an opt-in animated route replay (blob moving along the track at
-// real relative pace, with a play button and scrub slider).
+// start/finish markers, km distance markers, an elevation profile with a
+// hover/drag tooltip, and an opt-in animated route replay — camera follows
+// the blob zoomed in, with live distance/elevation readouts.
 export function FitnessMap({ points, height = 260 }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const blobRef = useRef(null)
   const rafRef = useRef(null)
   const startWallRef = useRef(0)
+  const savedViewRef = useRef(null) // {center, zoom} to restore when replay ends
   const [fullscreen, setFullscreen] = useState(false)
   const [error, setError] = useState('')
 
   const [replayOn, setReplayOn] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0) // 0..1
+  const [live, setLive] = useState(null) // { distKm, ele }
 
-  // Build a time-normalized timeline once per points array, so the blob's
-  // on-screen speed reflects real pace (lingers during slow/rest stretches,
-  // moves quickly through fast stretches) rather than moving at a constant rate.
+  const distCumRef = useRef(null)
+  useEffect(() => { distCumRef.current = points?.length ? cumulativeDistances(points) : null }, [points])
+
+  // Time-normalized timeline so the blob's on-screen speed reflects real
+  // pace (lingers during slow/rest stretches, dashes through fast ones).
   const timelineRef = useRef(null)
   useEffect(() => {
     if (!points?.length) { timelineRef.current = null; return }
@@ -50,20 +71,29 @@ export function FitnessMap({ points, height = 260 }) {
     }
   }, [points])
 
-  const positionAt = (frac) => {
+  // Position + live stats (distance, elevation) at a given fraction of the route
+  const stateAt = (frac) => {
     const tl = timelineRef.current
+    const cumDist = distCumRef.current
     if (!tl || !points?.length) return null
+    let lo, hi, local
     if (tl.hasTime) {
       const target = frac * tl.total
-      let lo = 0, hi = tl.cum.length - 1
+      lo = 0; hi = tl.cum.length - 1
       while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (tl.cum[mid] <= target) lo = mid; else hi = mid }
       const span = tl.cum[hi] - tl.cum[lo] || 1
-      const local = Math.min(1, Math.max(0, (target - tl.cum[lo]) / span))
-      return lerp(points[lo], points[hi], local)
+      local = Math.min(1, Math.max(0, (target - tl.cum[lo]) / span))
+    } else {
+      const target = frac * tl.total
+      lo = Math.floor(target); hi = Math.min(points.length - 1, lo + 1)
+      local = target - lo
     }
-    const target = frac * tl.total
-    const lo = Math.floor(target), hi = Math.min(points.length - 1, lo + 1)
-    return lerp(points[lo], points[hi], target - lo)
+    const a = points[lo], b = points[hi]
+    return {
+      lat: lerp(a.lat, b.lat, local), lon: lerp(a.lon, b.lon, local),
+      ele: (a.ele != null && b.ele != null) ? lerp(a.ele, b.ele, local) : (a.ele ?? b.ele ?? null),
+      distKm: cumDist ? lerp(cumDist[lo], cumDist[hi], local) : null,
+    }
   }
 
   // Init / rebuild the map whenever points or fullscreen changes
@@ -123,19 +153,30 @@ export function FitnessMap({ points, height = 260 }) {
     }
   }, [points, fullscreen])
 
-  // Show/hide the blob marker when replay mode toggles
+  // Toggling replay: show/hide the blob, and save/restore the map view so
+  // turning replay off returns to the full-route overview.
   useEffect(() => {
-    if (!mapRef.current || !blobRef.current) return
-    if (replayOn) blobRef.current.addTo(mapRef.current)
-    else blobRef.current.remove()
+    const map = mapRef.current, blob = blobRef.current
+    if (!map || !blob) return
+    if (replayOn) {
+      savedViewRef.current = { center: map.getCenter(), zoom: map.getZoom() }
+      blob.addTo(map)
+    } else {
+      blob.remove()
+      if (savedViewRef.current) map.setView(savedViewRef.current.center, savedViewRef.current.zoom, { animate: true })
+    }
   }, [replayOn])
 
-  // Keep the blob positioned at the current progress whenever it changes
-  // (from the RAF loop, or a manual slider drag)
+  // Keep the blob positioned + camera following + live stats updated
+  // whenever progress changes (from the RAF loop, or a manual slider drag)
   useEffect(() => {
     if (!replayOn || !blobRef.current) return
-    const pos = positionAt(progress)
-    if (pos) blobRef.current.setLatLng([pos.lat, pos.lon])
+    const s = stateAt(progress)
+    if (!s) return
+    blobRef.current.setLatLng([s.lat, s.lon])
+    setLive({ distKm: s.distKm, ele: s.ele })
+    if (mapRef.current) mapRef.current.setView([s.lat, s.lon], FOLLOW_ZOOM, { animate: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, replayOn, points])
 
   // Playback loop
@@ -160,8 +201,8 @@ export function FitnessMap({ points, height = 260 }) {
   }
   const scrub = (v) => { setPlaying(false); setProgress(v) }
 
-  const elevations = (points || []).map(p => p.ele).filter(e => e != null)
-  const hasEle = elevations.length > 10
+  const elevPoints = (points || []).filter(p => p.ele != null)
+  const hasEle = elevPoints.length > 10
 
   if (error) return <div style={{ padding: 12, fontSize: 12.5, color: 'var(--danger)' }}>{error}</div>
   if (!points?.length) return null
@@ -186,6 +227,17 @@ export function FitnessMap({ points, height = 260 }) {
           </button>
         </div>
 
+        {replayOn && live && (
+          <div style={{
+            position: 'absolute', top: 10, left: 10, zIndex: 1000,
+            background: 'var(--bg)', borderRadius: 10, padding: '7px 12px', boxShadow: 'var(--shadow-lg)',
+            display: 'flex', gap: 14,
+          }}>
+            <LiveStat label="Distance" value={live.distKm != null ? `${live.distKm.toFixed(2)} km` : '—'} />
+            {live.ele != null && <LiveStat label="Elevation" value={`${Math.round(live.ele)} m`} />}
+          </div>
+        )}
+
         {replayOn && (
           <div style={{
             position: 'absolute', left: 10, right: 10, bottom: 10, zIndex: 1000,
@@ -206,33 +258,67 @@ export function FitnessMap({ points, height = 260 }) {
           </div>
         )}
       </div>
-      {hasEle && !fullscreen && <ElevationProfile elevations={elevations} />}
+      {hasEle && !fullscreen && <ElevationProfile points={elevPoints} />}
     </div>
   )
 }
 
-function lerp(a, b, t) { return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t } }
-function haversineKm(a, b) {
-  const R = 6371, toRad = x => x * Math.PI / 180
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(h))
+function LiveStat({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9.5, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{value}</div>
+    </div>
+  )
 }
 
-function ElevationProfile({ elevations }) {
+// Elevation profile with a hover (mouse) / drag (touch) tooltip showing the
+// elevation — and distance along the route — at the cursor's position.
+function ElevationProfile({ points }) {
+  const svgRef = useRef(null)
+  const [hoverIdx, setHoverIdx] = useState(null)
   const w = 600, h = 70
+
+  const elevations = points.map(p => p.ele)
+  const cumDist = cumulativeDistances(points)
   const min = Math.min(...elevations), max = Math.max(...elevations)
   const range = Math.max(1, max - min)
   const step = w / (elevations.length - 1)
-  const pts = elevations.map((e, i) => `${(i * step).toFixed(1)},${(h - ((e - min) / range) * (h - 10) - 5).toFixed(1)}`).join(' ')
+  const xAt = i => i * step
+  const yAt = e => h - ((e - min) / range) * (h - 10) - 5
+  const pts = elevations.map((e, i) => `${xAt(i).toFixed(1)},${yAt(e).toFixed(1)}`).join(' ')
+
+  const updateHover = (clientX) => {
+    const rect = svgRef.current.getBoundingClientRect()
+    const relX = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    const idx = Math.round(relX * (elevations.length - 1))
+    setHoverIdx(idx)
+  }
+  const onMove = e => updateHover(e.clientX)
+  const onTouchMove = e => { if (e.touches[0]) { updateHover(e.touches[0].clientX); e.preventDefault() } }
+  const clear = () => setHoverIdx(null)
+
+  const hover = hoverIdx != null ? { x: xAt(hoverIdx), ele: elevations[hoverIdx], dist: cumDist[hoverIdx] } : null
+
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 10.5, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600, marginBottom: 4 }}>
-        Elevation · {Math.round(min)}–{Math.round(max)} m
+      <div style={{ fontSize: 10.5, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+        <span>Elevation · {Math.round(min)}–{Math.round(max)} m</span>
+        {hover && <span style={{ color: 'var(--text)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{Math.round(hover.ele)} m at {hover.dist.toFixed(2)} km</span>}
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 60, display: 'block' }} preserveAspectRatio="none">
+      <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 60, display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+        preserveAspectRatio="none"
+        onMouseMove={onMove} onMouseLeave={clear}
+        onTouchMove={onTouchMove} onTouchEnd={clear} onTouchStart={onTouchMove}
+      >
         <polyline points={`0,${h} ${pts} ${w},${h}`} fill="var(--accent-soft)" stroke="none" />
         <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="1.5" />
+        {hover && (
+          <>
+            <line x1={hover.x} y1={0} x2={hover.x} y2={h} stroke="var(--text-3)" strokeWidth="1" strokeDasharray="3,3" />
+            <circle cx={hover.x} cy={yAt(hover.ele)} r="4" fill="var(--accent)" stroke="white" strokeWidth="1.5" />
+          </>
+        )}
       </svg>
     </div>
   )
