@@ -170,6 +170,48 @@ export const PAGE_ILLUSTRATIONS = {
       <rect x="20" y="40" width="12" height="4" rx="2" fill="#9ca3af" opacity="0.3"/>
     </svg>
   ),
+  'ti-message-circle': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="10" width="48" height="44" rx="6" fill="#ede9fe"/>
+      <path d="M14 16h36c3.3 0 6 2.7 6 6v18c0 3.3-2.7 6-6 6H30l-10 8v-8h-6c-3.3 0-6-2.7-6-6V22c0-3.3 2.7-6 6-6z" fill="#7c3aed"/>
+      <circle cx="24" cy="31" r="3" fill="#fff" opacity="0.9"/>
+      <circle cx="35" cy="31" r="3" fill="#fff" opacity="0.65"/>
+      <circle cx="46" cy="31" r="3" fill="#fff" opacity="0.4"/>
+      <path d="M46 10 L52 4 L54 12 Z" fill="#c4b5fd"/>
+    </svg>
+  ),
+  'ti-notebook': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="12" y="8" width="40" height="48" rx="5" fill="#fef3c7"/>
+      <rect x="12" y="8" width="8" height="48" rx="4" fill="#d97706"/>
+      <rect x="26" y="18" width="20" height="3.5" rx="1.5" fill="#d97706" opacity="0.7"/>
+      <rect x="26" y="26" width="20" height="3.5" rx="1.5" fill="#d97706" opacity="0.5"/>
+      <rect x="26" y="34" width="14" height="3.5" rx="1.5" fill="#d97706" opacity="0.5"/>
+      <circle cx="20" cy="19.5" r="1.6" fill="#fffbeb"/>
+      <circle cx="20" cy="27.5" r="1.6" fill="#fffbeb"/>
+      <circle cx="20" cy="35.5" r="1.6" fill="#fffbeb"/>
+      <path d="M40 42l4 4 8-9" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+    </svg>
+  ),
+  'ti-wallet': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="16" width="48" height="34" rx="7" fill="#dcfce7"/>
+      <path d="M8 24c0-4.4 3.6-8 8-8h32c4.4 0 8 3.6 8 8v4H8v-4z" fill="#16a34a"/>
+      <rect x="8" y="28" width="48" height="22" rx="6" fill="#16a34a" opacity="0.85"/>
+      <rect x="36" y="34" width="16" height="10" rx="4" fill="#dcfce7"/>
+      <circle cx="44" cy="39" r="2.4" fill="#16a34a"/>
+    </svg>
+  ),
+  'ti-barbell': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="26" width="52" height="12" rx="6" fill="#fee2e2"/>
+      <rect x="24" y="29" width="16" height="6" rx="2" fill="#dc2626"/>
+      <rect x="10" y="18" width="8" height="28" rx="3" fill="#dc2626"/>
+      <rect x="4" y="22" width="6" height="20" rx="2.5" fill="#991b1b"/>
+      <rect x="46" y="18" width="8" height="28" rx="3" fill="#dc2626"/>
+      <rect x="54" y="22" width="6" height="20" rx="2.5" fill="#991b1b"/>
+    </svg>
+  ),
 }
 
 // Accent colours keyed by icon
@@ -188,6 +230,10 @@ export const PAGE_COLORS = {
   'ti-letter-w': '#538d4e',
   'ti-device-gamepad': '#16a34a',
   'ti-anchor':   '#1d4ed8',
+  'ti-message-circle': '#7c3aed',
+  'ti-notebook': '#d97706',
+  'ti-wallet':   '#16a34a',
+  'ti-barbell':  '#dc2626',
   'default':     '#6b7280',
 }
 
@@ -206,6 +252,10 @@ export const PAGE_BG = {
   'ti-letter-w': '#f0fdf4',
   'ti-device-gamepad': '#f0fdf4',
   'ti-anchor':   '#eff6ff',
+  'ti-message-circle': '#f5f3ff',
+  'ti-notebook': '#fffbeb',
+  'ti-wallet':   '#f0fdf4',
+  'ti-barbell':  '#fef2f2',
   'default':     '#f9fafb',
 }
 
