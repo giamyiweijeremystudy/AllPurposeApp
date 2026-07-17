@@ -59,17 +59,28 @@ export async function buildAppContext(appId, userId, state) {
   try {
     if (userId) {
       const { data: kb } = await supabase
-        .from('kb_entries').select('id,title,content')
+        .from('kb_nodes').select('id,parent_id,kind,title,content')
         .eq('app_id', appId).eq('user_id', userId)
-        .order('updated_at', { ascending: false }).limit(30)
+        .order('updated_at', { ascending: false })
       if (kb?.length) {
+        const byId = Object.fromEntries(kb.map(n => [n.id, n]))
+        const pathOf = n => {
+          const parts = [n.title]
+          let p = n.parent_id
+          while (p && byId[p]) { parts.unshift(byId[p].title); p = byId[p].parent_id }
+          return parts.join(' / ')
+        }
+        const pages = kb.filter(n => n.kind === 'page').slice(0, 30)
+        const folders = kb.filter(n => n.kind === 'folder')
         parts.push(
-          `Knowledge base entries:\n` +
-          kb.map(k => `- [id:${k.id}] ${k.title}: ${(k.content || '').slice(0, 200)}${(k.content || '').length > 200 ? '…' : ''}`).join('\n')
+          `Knowledge base — organized as books/sections/subsections/pages:\n` +
+          `Folders: ${folders.map(f => pathOf(f)).join(', ') || 'none yet'}\n` +
+          `Pages (most recently updated first):\n` +
+          pages.map(p => `- [id:${p.id}] ${pathOf(p)}: ${(p.content || '').slice(0, 150)}${(p.content || '').length > 150 ? '…' : ''}`).join('\n')
         )
       }
     }
-  } catch (e) { /* kb_entries table may not exist yet — ignore */ }
+  } catch (e) { /* kb_nodes table may not exist yet — ignore */ }
 
   try {
     if (userId) {

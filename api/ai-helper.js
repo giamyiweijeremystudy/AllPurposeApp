@@ -147,19 +147,22 @@ const TOOLS = [{
       description: 'Remove a page from the sidebar.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
-    // ── Knowledge base entries ─────────────────────────────
+    // ── Knowledge base (books/sections/subsections/pages) ───
     {
       name: 'add_kb_entry',
-      description: "Create a new entry in the user's knowledge base / learning notes.",
+      description: "Create a new page in the user's knowledge base. If they don't specify a book/section to file it under, put it in (or create) a sensible top-level book based on the topic — don't just dump everything unfiled. For anything beyond a single quick page (e.g. setting up a whole new topic with structure), tell the user to use the AI filing assistant inside the Knowledge page instead, which has full move/organize tools.",
       parameters: {
         type: 'OBJECT',
-        properties: { title: { type: 'STRING' }, content: { type: 'STRING' } },
+        properties: {
+          title: { type: 'STRING' }, content: { type: 'STRING' },
+          parent_id: { type: 'STRING', description: "id of the folder (book/section/subsection) to file this page under, from the app snapshot's Folders list. Omit to create a new top-level book with the same name as a sensible topic." },
+        },
         required: ['title', 'content'],
       },
     },
     {
       name: 'update_kb_entry',
-      description: 'Update the title or content of an existing knowledge base entry.',
+      description: 'Update the title or content of an existing knowledge base page.',
       parameters: {
         type: 'OBJECT',
         properties: { id: ID_PARAM, title: { type: 'STRING' }, content: { type: 'STRING' } },
@@ -168,7 +171,7 @@ const TOOLS = [{
     },
     {
       name: 'delete_kb_entry',
-      description: 'Delete a knowledge base entry.',
+      description: 'Delete a knowledge base page.',
       parameters: { type: 'OBJECT', properties: { id: ID_PARAM }, required: ['id'] },
     },
     // ── Finance ────────────────────────────────────────────
