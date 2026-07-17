@@ -44,6 +44,7 @@ export function Knowledge({ appId, userId }) {
   const [aiDraft, setAiDraft] = useState(null)
   const [customInstruction, setCustomInstruction] = useState('')
   const [resources, setResources] = useState([])
+  const [pageMode, setPageMode] = useState('view') // 'view' | 'edit', per open page
 
   const reload = async () => {
     const { data } = await supabase.from('kb_nodes').select('*').eq('app_id', appId).eq('user_id', userId).order('sort_order')
@@ -54,6 +55,7 @@ export function Knowledge({ appId, userId }) {
 
   useEffect(() => {
     if (!activePageId) { setResources([]); return }
+    setPageMode('view')
     supabase.from('kb_resources').select('*').eq('node_id', activePageId).order('sort_order')
       .then(({ data }) => setResources(data || []))
   }, [activePageId])
@@ -131,28 +133,58 @@ export function Knowledge({ appId, userId }) {
   if (activePage) {
     return (
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
-        <button onClick={() => setActivePageId(null)} style={{
-          display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent',
-          color: 'var(--text-3)', fontSize: 13, padding: '4px 2px', marginBottom: 10, cursor: 'pointer',
-        }}>
-          <i className="ti ti-arrow-left" /> {trail.length ? trail[trail.length - 1].title : 'Books'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+          <button onClick={() => setActivePageId(null)} style={{
+            display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent',
+            color: 'var(--text-3)', fontSize: 13, padding: '4px 2px', cursor: 'pointer', flex: 1,
+          }}>
+            <i className="ti ti-arrow-left" /> {trail.length ? trail[trail.length - 1].title : 'Books'}
+          </button>
+          <button onClick={() => setPageMode(m => m === 'edit' ? 'view' : 'edit')} style={{
+            display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px',
+            background: pageMode === 'edit' ? 'var(--accent-soft)' : 'var(--bg-2)', color: pageMode === 'edit' ? 'var(--accent)' : 'var(--text-2)',
+            fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <i className={`ti ${pageMode === 'edit' ? 'ti-check' : 'ti-pencil'}`} /> {pageMode === 'edit' ? 'Done' : 'Edit'}
+          </button>
+        </div>
 
-        <input
-          value={activePage.title}
-          onChange={e => setNodes(prev => prev.map(n => n.id === activePage.id ? { ...n, title: e.target.value } : n))}
-          onBlur={() => saveRename(activePage.id, activePage.title)}
-          style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-display)', padding: '4px 2px', marginBottom: 12, boxSizing: 'border-box' }}
-        />
+        {pageMode === 'edit' ? (
+          <input
+            value={activePage.title}
+            onChange={e => setNodes(prev => prev.map(n => n.id === activePage.id ? { ...n, title: e.target.value } : n))}
+            onBlur={() => saveRename(activePage.id, activePage.title)}
+            style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-display)', padding: '4px 2px', marginBottom: 12, boxSizing: 'border-box' }}
+          />
+        ) : (
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text)', padding: '4px 2px', marginBottom: 14 }}>
+            {activePage.title}
+          </div>
+        )}
 
-        <textarea
-          value={activePage.content}
-          onChange={e => patchContent(activePage.id, e.target.value)}
-          onBlur={() => saveContent(activePage.id, activePage.content)}
-          placeholder="Write this page, or ask the AI below to help fill it in…"
-          style={{ width: '100%', minHeight: 220, resize: 'vertical', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13.5, lineHeight: 1.6, fontFamily: 'inherit', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
-        />
+        {pageMode === 'edit' ? (
+          <textarea
+            value={activePage.content}
+            onChange={e => patchContent(activePage.id, e.target.value)}
+            onBlur={() => saveContent(activePage.id, activePage.content)}
+            placeholder="Write this page, or ask the AI below to help fill it in…"
+            autoFocus
+            style={{ width: '100%', minHeight: 220, resize: 'vertical', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13.5, lineHeight: 1.6, fontFamily: 'inherit', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
+          />
+        ) : (
+          activePage.content ? (
+            <div style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text)', whiteSpace: 'pre-wrap', padding: '2px 2px' }}>
+              {activePage.content}
+            </div>
+          ) : (
+            <div onClick={() => setPageMode('edit')} style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontSize: 13, border: '1px dashed var(--border-2)', borderRadius: 10, cursor: 'pointer' }}>
+              This page is empty. Tap here (or Edit above) to start writing.
+            </div>
+          )
+        )}
 
+        {pageMode === 'edit' && (
+        <>
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {AI_MODES.map(m => (
             <button key={m.id} onClick={() => runAI(m.id)} disabled={aiBusy} style={{
@@ -193,6 +225,8 @@ export function Knowledge({ appId, userId }) {
               <button onClick={() => setAiDraft(null)} style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', background: 'transparent', color: 'var(--text)', fontSize: 12.5, cursor: 'pointer' }}>Close</button>
             )}
           </div>
+        )}
+        </>
         )}
 
         <ResourcesSection node={activePage} resources={resources} appId={appId} userId={userId}
