@@ -178,7 +178,7 @@ function AddResourceModal({ node, appId, userId, onClose, onAdded }) {
               <i className="ti ti-upload" style={{ fontSize: 22 }} />
               {busy ? 'Uploading…' : 'Choose a photo, PDF, video, or document'}
             </button>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginTop: 6 }}>Max 50MB per file</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginTop: 6 }}>Stored via Cloudinary (free tier)</div>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 6 }}>

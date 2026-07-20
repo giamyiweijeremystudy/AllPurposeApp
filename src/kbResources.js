@@ -34,20 +34,47 @@ export const DOC_ICONS = {
   link: 'ti-link', document: 'ti-file-text', file: 'ti-file',
 }
 
-// Uploads a File to the kb-files Supabase Storage bucket, under the
-// user's own folder, and returns { url, storage_path, mime_type, size_bytes }.
-// Free-tier Supabase Storage: 1GB total, 50MB max per file — no billing
-// card required, unlike Cloudflare R2 or Firebase Storage.
+// Uploads a File directly to Cloudinary (free tier: 25 credits/month, no
+// card required) via a signed upload — the file goes straight from the
+// browser to Cloudinary, our server only ever sees a short-lived signature.
 export async function uploadKbFile(userId, file) {
-  const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
-  const path = `${userId}/${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage.from('kb-files').upload(path, file, { contentType: file.type || undefined })
-  if (error) throw error
-  const { data } = supabase.storage.from('kb-files').getPublicUrl(path)
-  return { url: data.publicUrl, storage_path: path, mime_type: file.type || null, size_bytes: file.size }
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const signRes = await fetch('/api/cloudinary-sign', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  })
+  const sign = await signRes.json()
+  if (!signRes.ok) throw new Error(sign.error || 'Could not start the upload')
+
+  const form = new FormData()
+  form.append('file', file)
+  form.append('api_key', sign.apiKey)
+  form.append('timestamp', sign.timestamp)
+  form.append('signature', sign.signature)
+  form.append('folder', sign.folder)
+
+  const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${sign.cloudName}/auto/upload`, { method: 'POST', body: form })
+  const result = await uploadRes.json()
+  if (!uploadRes.ok) throw new Error(result?.error?.message || 'Upload failed')
+
+  return {
+    url: result.secure_url,
+    storage_path: `${result.resource_type}:${result.public_id}`, // encodes resource_type, needed to delete later
+    mime_type: file.type || null,
+    size_bytes: result.bytes || file.size,
+  }
 }
 
 export async function deleteKbFile(storagePath) {
   if (!storagePath) return
-  await supabase.storage.from('kb-files').remove([storagePath])
+  const [resourceType, publicId] = storagePath.includes(':') ? storagePath.split(/:(.+)/) : ['image', storagePath]
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) return
+  await fetch('/api/cloudinary-delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ publicId, resourceType }),
+  }).catch(() => {})
 }
