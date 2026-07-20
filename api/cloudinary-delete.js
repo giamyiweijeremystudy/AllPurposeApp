@@ -9,7 +9,7 @@ async function verifyUser(req) {
   const auth = req.headers.authorization || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
   if (!token) return null
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data?.user) return null
   return data.user.id

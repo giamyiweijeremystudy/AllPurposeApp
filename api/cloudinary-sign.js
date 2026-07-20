@@ -5,9 +5,10 @@
 //
 // Requires: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 // (from cloudinary.com dashboard, no card needed for the free plan).
-// Also requires SUPABASE_URL and SUPABASE_ANON_KEY (same values as your
-// VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY, without the VITE_ prefix) to
-// verify who's uploading.
+// Also reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (already set for
+// the client) to verify who's uploading — Vercel serverless functions can
+// read any env var via process.env regardless of the VITE_ prefix, which
+// only affects what Vite inlines into the browser bundle.
 
 import { createHash } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
@@ -16,7 +17,7 @@ async function verifyUser(req) {
   const auth = req.headers.authorization || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
   if (!token) return null
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data?.user) return null
   return data.user.id
@@ -30,8 +31,8 @@ export default async function handler(req, res) {
   const required = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET']
   const missing = required.filter(k => !process.env[k])
   if (missing.length) return res.status(500).json({ error: `Cloudinary is not configured yet — missing env vars: ${missing.join(', ')}` })
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-    return res.status(500).json({ error: 'Server is missing SUPABASE_URL / SUPABASE_ANON_KEY (needed to verify who is uploading).' })
+  if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+    return res.status(500).json({ error: 'Server is missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.' })
   }
 
   const userId = await verifyUser(req)
