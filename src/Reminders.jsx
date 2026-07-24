@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
+import { NotificationsCard } from './NotificationsCard.jsx'
 
 function pad(n) { return String(n).padStart(2, '0') }
 function todayStr() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
@@ -70,6 +71,8 @@ export function Reminders({ appId, userId }) {
           <i className="ti ti-plus" /> New reminder
         </button>
       </div>
+
+      <NotificationsCard appId={appId} userId={userId} />
 
       <Section title="Urgent" icon="ti-alert-triangle" iconColor="#dc2626" tasks={urgent} today={today} onOpen={setModal} onToggle={toggleComplete}
         empty="Nothing urgent right now." />
