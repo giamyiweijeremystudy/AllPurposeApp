@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { loadState } from './db.js'
 import { ScheduleDashboard } from './ScheduleDashboard.jsx'
-import { TaskManager } from './TaskManager.jsx'
+import { Reminders } from './Reminders.jsx'
 import { WidgetCard } from './WidgetCard.jsx'
 import { Toast } from './ui.jsx'
 import { Overview } from './Overview.jsx'
@@ -194,11 +194,12 @@ export default function App() {
     }
     if (activeTabLabel === 'Dashboard' && activeNavItem?.label === 'Schedule') {
       return <ScheduleDashboard appId={appId} mobileOffset={mobileOffset} onSwitchTab={which => {
-        const target = pageTabs.find(t => which === 'calendar' ? t.label === 'Main Calendar' : t.label === 'Task manager')
+        if (which === 'tasks') { const remindersNav = navItems.find(i => i.label === 'Reminders'); if (remindersNav) navigateTo(remindersNav.id); return }
+        const target = pageTabs.find(t => t.label === 'Main Calendar')
         if (target) setActiveTab(p => ({ ...p, [activeNav]: target.id }))
       }} />
     }
-    if (activeTabLabel === 'Task manager') return <TaskManager appId={appId} />
+    if (activeNavItem?.label === 'Reminders') return <Reminders appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'AI Helper') return <AIHelper appId={appId} userId={user?.id} state={state} onDataChanged={refreshState} />
     if (activeNavItem?.label === 'Knowledge') return <Knowledge appId={appId} userId={user?.id} />
     if (activeNavItem?.label === 'Finance') return <Finance appId={appId} userId={user?.id} />

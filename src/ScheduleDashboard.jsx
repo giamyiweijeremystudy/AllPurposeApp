@@ -144,7 +144,7 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
             ),
           },
           {
-            label: 'Task Manager',
+            label: 'Reminders',
             sub: 'Track your to-dos',
             onClick: () => onSwitchTab('tasks'),
             color: '#16a34a',
@@ -277,7 +277,7 @@ export function ScheduleDashboard({ appId, onSwitchTab, mobileOffset = 94 }) {
         </Panel>
 
         {/* Tasks */}
-        <Panel title="Tasks" action={{ label:'View all →', onClick:() => onSwitchTab('tasks') }}>
+        <Panel title="Reminders" action={{ label:'View all →', onClick:() => onSwitchTab('tasks') }}>
           {pendingTasks.length === 0
             ? <Empty>No pending tasks</Empty>
             : pendingTasks.map((task, i) => (

@@ -53,7 +53,7 @@ export function LiveModules({ appId, userId, navItems, onNavigate }) {
   const modules = []
 
   modules.push({
-    key: 'tasks', kicker: 'Tasks', icon: 'ti-checkbox', target: 'Schedule',
+    key: 'tasks', kicker: 'Reminders', icon: 'ti-checkbox', target: 'Reminders',
     value: String(data.openTasks),
     sub: data.overdue > 0 ? `${data.overdue} overdue · ${data.dueToday} due today` : `${data.dueToday} due today`,
     alert: data.overdue > 0,

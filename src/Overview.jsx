@@ -212,6 +212,14 @@ export const PAGE_ILLUSTRATIONS = {
       <rect x="54" y="22" width="6" height="20" rx="2.5" fill="#991b1b"/>
     </svg>
   ),
+  'ti-bell': (
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M32 8c-9 0-14 6.5-14 15v9l-6 10h40l-6-10v-9c0-8.5-5-15-14-15z" fill="#fde68a"/>
+      <path d="M32 8c-9 0-14 6.5-14 15v9l-6 10h40l-6-10v-9c0-8.5-5-15-14-15z" fill="#f59e0b" opacity="0.55"/>
+      <circle cx="32" cy="8" r="4" fill="#d97706"/>
+      <path d="M24 47a8 8 0 0 0 16 0" stroke="#92400e" strokeWidth="4" strokeLinecap="round" fill="none"/>
+    </svg>
+  ),
 }
 
 // Accent colours keyed by icon
@@ -234,6 +242,7 @@ export const PAGE_COLORS = {
   'ti-notebook': '#d97706',
   'ti-wallet':   '#16a34a',
   'ti-barbell':  '#dc2626',
+  'ti-bell':     '#d97706',
   'default':     '#6b7280',
 }
 
@@ -256,6 +265,7 @@ export const PAGE_BG = {
   'ti-notebook': '#fffbeb',
   'ti-wallet':   '#f0fdf4',
   'ti-barbell':  '#fef2f2',
+  'ti-bell':     '#fffbeb',
   'default':     '#f9fafb',
 }
 
